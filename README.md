@@ -4,7 +4,7 @@ A small insurance-commission portal (FastAPI + SQLAlchemy + Jinja2 + Tailwind)
 and the automation framework built to test it: an API client, JSON Schema
 contracts, Playwright page objects, and pytest fixtures.
 
-**The test files are intentionally empty.** Every file under `tests/` contains a
+Every file under `tests/` contains a
 module docstring and named stubs with one-line docstrings, and no bodies — the
 scaffolding is finished, the assertions are yours to write.
 
