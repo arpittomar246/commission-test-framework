@@ -1,12 +1,40 @@
+[![CI](https://github.com/arpittomar246/commission-test-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/arpittomar246/commission-test-framework/actions)
+
 # Commission Portal — app + test framework
 
 A small insurance-commission portal (FastAPI + SQLAlchemy + Jinja2 + Tailwind)
 and the automation framework built to test it: an API client, JSON Schema
 contracts, Playwright page objects, and pytest fixtures.
 
-Every file under `tests/` contains a
-module docstring and named stubs with one-line docstrings, and no bodies — the
-scaffolding is finished, the assertions are yours to write.
+Tests are written across three layers: **API** (pytest + requests), **UI**
+(Playwright driving Chromium), and **parity** checks that verify both layers
+agree on the same number. They are being added incrementally — run
+`pytest --collect-only -q` for the current count.
+
+## Architecture
+
+```mermaid
+graph LR
+    P[pytest] --> A[API tests]
+    P --> U[UI tests<br/>Playwright]
+    P --> R[Parity tests]
+
+    A --> API[FastAPI<br/>REST endpoints]
+    U --> WEB[Jinja2 + Tailwind UI]
+    R --> API
+    R --> WEB
+
+    WEB --> API
+    API --> DB[(SQLite)]
+
+    style R fill:#fff3cd,stroke:#856404
+    style P fill:#e7f3ff,stroke:#0366d6
+```
+
+The parity layer is the point of the project. It creates state through one path
+and verifies it through the other — cancelling a policy in the browser, then
+asserting the API reflects the clawback and the guarantee floor still holds.
+Two routes to the same number, and they have to agree.
 
 ## Quick start
 
@@ -97,7 +125,7 @@ pages/
   policies_page.py
   commission_page.py
 tests/
-  api/  ui/  parity/   empty stubs — yours to fill in
+  api/  ui/  parity/   the three test layers
 ```
 
 ## Writing the tests
@@ -163,6 +191,18 @@ pytest -m api -n auto --dist loadfile
 | `HEADLESS` | `true` |
 | `SLOW_MO` | `0` (milliseconds, for watching a run) |
 | `DB_PATH` | `./commission.db` |
+
+## Parallel execution
+
+<!-- fill these in from a real run:
+       pytest            -> serial
+       pytest -n 4       -> parallel
+-->
+
+| Mode | Time |
+| --- | --- |
+| Serial | _TBD_ |
+| Parallel (`-n 4`) | _TBD_ |
 
 ## Docker
 
