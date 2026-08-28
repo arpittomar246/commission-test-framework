@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block topbar %}
+<a href="/policies" data-testid="new-button"
+   class="rounded-md bg-accent-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-accent-600">
+  New Policy
+</a>
+{% endblock %}
+
+{% block content %}
+<section class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="stat-cards">
+
+  <div class="rounded-xl border border-slate-200 bg-white p-5" data-testid="stat-card-agents">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Agents</p>
+    <p class="mt-2 text-3xl font-semibold tracking-tight" data-testid="stat-total-agents">--</p>
+  </div>
+
+  <div class="rounded-xl border border-slate-200 bg-white p-5" data-testid="stat-card-active-policies">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Active Policies</p>
+    <p class="mt-2 text-3xl font-semibold tracking-tight" data-testid="stat-active-policies">--</p>
+  </div>
+
+  <div class="rounded-xl border border-slate-200 bg-white p-5" data-testid="stat-card-cancelled">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Cancelled This Month</p>
+    <p class="mt-2 text-3xl font-semibold tracking-tight" data-testid="stat-cancelled-this-month">--</p>
+  </div>
+
+  <div class="rounded-xl border border-slate-200 bg-white p-5" data-testid="stat-card-payout">
+    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total Payout This Month</p>
+    <p class="mt-2 text-3xl font-semibold tracking-tight text-accent-600" data-testid="stat-total-payout">--</p>
+  </div>
+</section>
+
+<section class="mt-8 rounded-xl border border-slate-200 bg-white" data-testid="recent-activity">
+  <div class="border-b border-slate-200 px-5 py-4">
+    <h2 class="text-sm font-semibold">Recent Activity</h2>
+    <p class="text-xs text-slate-500">The ten most recent policies</p>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm" data-testid="recent-activity-table">
+      <thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+        <tr>
+          <th class="px-5 py-3 font-semibold">ID</th>
+          <th class="px-5 py-3 font-semibold">Customer</th>
+          <th class="px-5 py-3 font-semibold">Agent</th>
+          <th class="px-5 py-3 font-semibold">Value</th>
+          <th class="px-5 py-3 font-semibold">Sold Date</th>
+          <th class="px-5 py-3 font-semibold">Status</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100" data-testid="recent-activity-body"></tbody>
+    </table>
+  </div>
+
+  <div class="hidden px-5 py-16 text-center" data-testid="dashboard-empty-state">
+    <p class="text-sm font-semibold text-slate-700">No activity yet</p>
+    <p class="mt-1 text-sm text-slate-500">Policies you record will show up here.</p>
+    <a href="/policies" data-testid="dashboard-empty-cta"
+       class="mt-4 inline-block rounded-md bg-accent-500 px-3.5 py-2 text-sm font-semibold text-white hover:bg-accent-600">
+      Add a policy
+    </a>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDashboard() {
+  const [stats, policies] = await Promise.all([
+    API.get('/api/stats'),
+    API.get('/api/policies'),
+  ]);
+
+  document.querySelector('[data-testid="stat-total-agents"]').textContent = stats.total_agents;
+  document.querySelector('[data-testid="stat-active-policies"]').textContent = stats.active_policies;
+  document.querySelector('[data-testid="stat-cancelled-this-month"]').textContent = stats.cancelled_this_month;
+  document.querySelector('[data-testid="stat-total-payout"]').textContent = fmtMoney(stats.total_payout);
+
+  const body = document.querySelector('[data-testid="recent-activity-body"]');
+  const recent = policies.slice(0, 10);
+
+  if (recent.length === 0) {
+    body.innerHTML = '';
+    document.querySelector('[data-testid="recent-activity-table"]').classList.add('hidden');
+    show('dashboard-empty-state');
+    return;
+  }
+
+  document.querySelector('[data-testid="recent-activity-table"]').classList.remove('hidden');
+  hide('dashboard-empty-state');
+  body.innerHTML = recent
+    .map(
+      (p) => `
+      <tr data-testid="recent-activity-row-${p.id}" class="hover:bg-slate-50">
+        <td class="px-5 py-3 font-mono text-xs text-slate-500">#${p.id}</td>
+        <td class="px-5 py-3 font-medium">${escapeHtml(p.customer_name)}</td>
+        <td class="px-5 py-3 text-slate-600">${escapeHtml(p.agent_name)}</td>
+        <td class="px-5 py-3 tabular-nums">${fmtMoney(p.value)}</td>
+        <td class="px-5 py-3 text-slate-600">${fmtDate(p.sold_date)}</td>
+        <td class="px-5 py-3">${statusBadge(p.status, `recent-activity-status-${p.id}`)}</td>
+      </tr>`
+    )
+    .join('');
+}
+
+loadDashboard().catch((e) => toast(e.message, 'error'));
+</script>
+{% endblock %}

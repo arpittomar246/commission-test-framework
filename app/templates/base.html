@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} &middot; Commission Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            accent: {
+              50: '#eef4ff', 100: '#d9e6ff', 200: '#bcd3ff', 400: '#6b93f5',
+              500: '#3b6fe0', 600: '#2b57bd', 700: '#22459a'
+            }
+          }
+        }
+      }
+    };
+  </script>
+  {% block head %}{% endblock %}
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+<div class="flex min-h-screen">
+
+  <!-- sidebar -->
+  <aside class="w-60 shrink-0 border-r border-slate-200 bg-white" data-testid="sidebar">
+    <div class="flex h-16 items-center gap-2 border-b border-slate-200 px-5">
+      <div class="flex h-8 w-8 items-center justify-center rounded-md bg-accent-500 text-sm font-bold text-white">CP</div>
+      <span class="text-sm font-semibold tracking-tight">Commission Portal</span>
+    </div>
+    <nav class="p-3" data-testid="sidebar-nav">
+      {% set items = [
+        ('dashboard', '/', 'Dashboard'),
+        ('agents', '/agents', 'Agents'),
+        ('policies', '/policies', 'Policies'),
+        ('commission', '/commission', 'Commission')
+      ] %}
+      {% for key, href, label in items %}
+      <a href="{{ href }}"
+         data-testid="nav-{{ key }}"
+         data-active="{{ 'true' if active_nav == key else 'false' }}"
+         class="mb-1 block rounded-md px-3 py-2 text-sm font-medium
+                {% if active_nav == key %}bg-accent-50 text-accent-700{% else %}text-slate-600 hover:bg-slate-100{% endif %}">
+        {{ label }}
+      </a>
+      {% endfor %}
+    </nav>
+  </aside>
+
+  <!-- main -->
+  <div class="flex min-w-0 flex-1 flex-col">
+    <header class="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-8">
+      <h1 class="text-lg font-semibold tracking-tight" data-testid="page-title">{{ page_title }}</h1>
+      <div data-testid="topbar-actions">{% block topbar %}{% endblock %}</div>
+    </header>
+
+    <main class="flex-1 p-8" data-testid="page-content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<!-- toasts -->
+<div class="pointer-events-none fixed bottom-6 right-6 z-50 flex w-80 flex-col gap-2"
+     data-testid="toast-container"></div>
+
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

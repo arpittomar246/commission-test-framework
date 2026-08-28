@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Commission",
+  "type": "object",
+  "required": [
+    "agent_id",
+    "month",
+    "gross_commission",
+    "clawback",
+    "subtotal",
+    "guarantee_applied",
+    "final_payout",
+    "policy_count"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "agent_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "month": {
+      "type": "string",
+      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+    },
+    "gross_commission": {
+      "type": "number",
+      "minimum": 0
+    },
+    "clawback": {
+      "type": "number",
+      "minimum": 0
+    },
+    "subtotal": {
+      "type": "number"
+    },
+    "guarantee_applied": {
+      "type": "boolean"
+    },
+    "final_payout": {
+      "type": "number",
+      "minimum": 0
+    },
+    "policy_count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

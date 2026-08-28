@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Policy",
+  "type": "object",
+  "required": [
+    "id",
+    "agent_id",
+    "agent_name",
+    "customer_name",
+    "value",
+    "sold_date",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "agent_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "agent_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "customer_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "value": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "sold_date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "cancelled"
+      ]
+    }
+  }
+}

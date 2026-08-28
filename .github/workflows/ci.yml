@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BASE_URL: http://127.0.0.1:8000
+  API_URL: http://127.0.0.1:8000/api
+  DB_PATH: ${{ github.workspace }}/commission.db
+  HEADLESS: "true"
+  TIMEOUT: "15"
+
+jobs:
+  test:
+    name: pytest (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: api
+            marker: api
+          - suite: ui
+            marker: ui or parity
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Chromium
+        if: matrix.suite == 'ui'
+        run: python -m playwright install --with-deps chromium
+
+      - name: Seed the database
+        run: python -m app.seed
+
+      - name: Start the app
+        run: |
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 \
+            > uvicorn.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf "$BASE_URL/api/stats" > /dev/null; then
+              echo "app is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "app never became healthy"; cat uvicorn.log; exit 1
+
+      - name: Run tests
+        run: |
+          pytest -m "${{ matrix.marker }}" \
+            -n auto --dist loadfile \
+            --alluredir=allure-results \
+            --junitxml=junit-${{ matrix.suite }}.xml
+
+      - name: Show app log on failure
+        if: failure()
+        run: cat uvicorn.log
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.suite }}
+          path: allure-results
+          retention-days: 14
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-${{ matrix.suite }}
+          path: junit-${{ matrix.suite }}.xml
+          retention-days: 14
+
+  badge:
+    name: Badge snippet
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    steps:
+      - name: Print the README badge snippet
+        run: |
+          REPO="${{ github.repository }}"
+          echo "Paste this at the top of README.md:"
+          echo ""
+          echo "[![CI](https://github.com/$REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/$REPO/actions/workflows/ci.yml)"
+          echo ""
+          echo "Overall result: ${{ needs.test.result }}"

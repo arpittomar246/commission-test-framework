@@ -1,0 +1,35 @@
+# Brings up the app on :8000 with a seeded database.
+#
+#   docker compose up -d --wait     # start and wait for the healthcheck
+#   docker compose run --rm seed    # reload the demo dataset
+#   docker compose down -v          # stop and discard the data volume
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DB_PATH: /data/commission.db
+    volumes:
+      - commission-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/stats')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  seed:
+    build: .
+    environment:
+      DB_PATH: /data/commission.db
+    volumes:
+      - commission-data:/data
+    command: ["python", "-m", "app.seed"]
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  commission-data:
