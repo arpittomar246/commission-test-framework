@@ -152,8 +152,25 @@ def test_guarantee_flag_is_false_when_earnings_exactly_equal_the_minimum(
     assert top_up == pytest.approx(0.0)
 
 
-def test_zero_sales_inside_the_window_still_pay_the_minimum() -> None:
+def test_zero_sales_inside_the_window_still_pay_the_minimum(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+) -> None:
     """An agent with no policies at all is paid the guarantee."""
+    # No policy_factory here on purpose: the agent has sold nothing, ever.
+    agent = agent_factory(join_date=JOIN_DATE)
+
+    response = api_client.get_commission(agent["id"], JOIN_MONTH)
+
+    assert response.status == 200
+    assert response.body["policy_count"] == 0
+    assert response.body["gross_commission"] == pytest.approx(0.0)
+    assert response.body["clawback"] == pytest.approx(0.0)
+    assert response.body["subtotal"] == pytest.approx(0.0)
+    assert response.body["guarantee_applied"] is True
+    assert response.body["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
+    top_up = response.body["final_payout"] - response.body["subtotal"]
+    assert top_up == pytest.approx(MINIMUM_GUARANTEE)
 
 
 def test_months_before_the_join_date_are_not_covered() -> None:
