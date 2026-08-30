@@ -25,6 +25,13 @@ NOVEMBER_JOIN_DATE = "2024-11-15"
 NOVEMBER_THIRD_MONTH = "2025-01"
 NOVEMBER_FOURTH_MONTH = "2025-02"
 
+# Joining on the last day of January: one day of that month, but still month 0.
+# Ninety days from this date lands on 30 April, so a day-counting
+# implementation would disagree about April.
+LAST_DAY_JOIN_DATE = "2024-01-31"
+LAST_DAY_JOIN_MONTH = "2024-01"
+LAST_DAY_FOURTH_MONTH = "2024-04"
+
 
 def test_join_month_is_covered_by_the_guarantee(
     api_client: ApiClient,
@@ -221,8 +228,28 @@ def test_guarantee_window_spans_a_year_boundary(
     assert february.body["final_payout"] == pytest.approx(5_000.0)
 
 
-def test_guarantee_window_is_measured_in_calendar_months_not_days() -> None:
+def test_guarantee_window_is_measured_in_calendar_months_not_days(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Joining on the last day of a month still spends that whole month in the window."""
+    agent = agent_factory(join_date=LAST_DAY_JOIN_DATE)
+    policy_factory(agent["id"], value=50_000, sold_date=f"{LAST_DAY_JOIN_MONTH}-31")
+    policy_factory(agent["id"], value=50_000, sold_date=f"{LAST_DAY_FOURTH_MONTH}-15")
+
+    january = api_client.get_commission(agent["id"], LAST_DAY_JOIN_MONTH)
+    april = api_client.get_commission(agent["id"], LAST_DAY_FOURTH_MONTH)
+
+    # One day on the books, but January is month 0 and covered in full.
+    assert january.body["subtotal"] == pytest.approx(5_000.0)
+    assert january.body["guarantee_applied"] is True
+    assert january.body["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
+
+    # April is month 3 and uncovered, even though it is inside 90 days of joining.
+    assert april.body["subtotal"] == pytest.approx(5_000.0)
+    assert april.body["guarantee_applied"] is False
+    assert april.body["final_payout"] == pytest.approx(5_000.0)
 
 
 def test_guarantee_flag_reported_on_the_agent_record_matches_the_calculation() -> None:
