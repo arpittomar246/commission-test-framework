@@ -17,7 +17,13 @@ JOIN_MONTH = "2024-03"
 SECOND_MONTH = "2024-04"
 THIRD_MONTH = "2024-05"
 FOURTH_MONTH = "2024-06"
+MONTH_BEFORE_JOINING = "2024-02"
 MINIMUM_GUARANTEE = 20_000.0
+
+# An agent who joins in November is covered through the following January.
+NOVEMBER_JOIN_DATE = "2024-11-15"
+NOVEMBER_THIRD_MONTH = "2025-01"
+NOVEMBER_FOURTH_MONTH = "2025-02"
 
 
 def test_join_month_is_covered_by_the_guarantee(
@@ -173,12 +179,46 @@ def test_zero_sales_inside_the_window_still_pay_the_minimum(
     assert top_up == pytest.approx(MINIMUM_GUARANTEE)
 
 
-def test_months_before_the_join_date_are_not_covered() -> None:
+def test_months_before_the_join_date_are_not_covered(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+) -> None:
     """A month earlier than the join date gets no guarantee."""
+    # Deliberately the same shape as the zero-sales test above -- an agent with
+    # no policies -- so the queried month is the only thing that differs.
+    agent = agent_factory(join_date=JOIN_DATE)
+
+    response = api_client.get_commission(agent["id"], MONTH_BEFORE_JOINING)
+
+    assert response.status == 200
+    assert response.body["policy_count"] == 0
+    assert response.body["subtotal"] == pytest.approx(0.0)
+    assert response.body["guarantee_applied"] is False
+    assert response.body["final_payout"] == pytest.approx(0.0)
 
 
-def test_guarantee_window_spans_a_year_boundary() -> None:
+def test_guarantee_window_spans_a_year_boundary(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """An agent joining in November is covered through January."""
+    agent = agent_factory(join_date=NOVEMBER_JOIN_DATE)
+    policy_factory(agent["id"], value=50_000, sold_date=f"{NOVEMBER_THIRD_MONTH}-09")
+    policy_factory(agent["id"], value=50_000, sold_date=f"{NOVEMBER_FOURTH_MONTH}-09")
+
+    january = api_client.get_commission(agent["id"], NOVEMBER_THIRD_MONTH)
+    february = api_client.get_commission(agent["id"], NOVEMBER_FOURTH_MONTH)
+
+    # January is month 2 -- the last covered month, on the far side of the year.
+    assert january.body["subtotal"] == pytest.approx(5_000.0)
+    assert january.body["guarantee_applied"] is True
+    assert january.body["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
+
+    # February is month 3, so the window has closed and the earnings stand.
+    assert february.body["subtotal"] == pytest.approx(5_000.0)
+    assert february.body["guarantee_applied"] is False
+    assert february.body["final_payout"] == pytest.approx(5_000.0)
 
 
 def test_guarantee_window_is_measured_in_calendar_months_not_days() -> None:
