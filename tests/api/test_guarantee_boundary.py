@@ -4,13 +4,36 @@ The guarantee covers the join month and the two months after it, and lapses
 from the fourth month onward.
 """
 
+from typing import Callable
+
 import pytest
+
+from framework.api_client import ApiClient
 
 pytestmark = pytest.mark.api
 
+JOIN_DATE = "2024-03-10"
+JOIN_MONTH = "2024-03"
+MINIMUM_GUARANTEE = 20_000.0
 
-def test_join_month_is_covered_by_the_guarantee() -> None:
+
+def test_join_month_is_covered_by_the_guarantee(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Month 0 pays the minimum when sales fall short."""
+    agent = agent_factory(join_date=JOIN_DATE)
+    policy_factory(agent["id"], value=50_000, sold_date=f"{JOIN_MONTH}-18")
+
+    response = api_client.get_commission(agent["id"], JOIN_MONTH)
+
+    assert response.status == 200
+    assert response.body["gross_commission"] == pytest.approx(5_000.0)
+    assert response.body["clawback"] == pytest.approx(0.0)
+    assert response.body["subtotal"] == pytest.approx(5_000.0)
+    assert response.body["guarantee_applied"] is True
+    assert response.body["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
 
 
 def test_second_month_is_covered_by_the_guarantee() -> None:
