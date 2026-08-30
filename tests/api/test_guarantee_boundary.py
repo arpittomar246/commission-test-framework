@@ -16,6 +16,7 @@ JOIN_DATE = "2024-03-10"
 JOIN_MONTH = "2024-03"
 SECOND_MONTH = "2024-04"
 THIRD_MONTH = "2024-05"
+FOURTH_MONTH = "2024-06"
 MINIMUM_GUARANTEE = 20_000.0
 
 
@@ -83,8 +84,28 @@ def test_third_month_is_the_last_covered_month(
     assert top_up == pytest.approx(1.0)
 
 
-def test_fourth_month_is_outside_the_guarantee() -> None:
+def test_fourth_month_is_outside_the_guarantee(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Month 3 pays only what was actually earned."""
+    agent = agent_factory(join_date=JOIN_DATE)
+    # The same one-rupee shortfall the third month was topped up for; here the
+    # window has closed, so the agent keeps 19,999 and nothing reaches for it.
+    policy_factory(agent["id"], value=199_990, sold_date=f"{FOURTH_MONTH}-27")
+
+    response = api_client.get_commission(agent["id"], FOURTH_MONTH)
+
+    assert response.status == 200
+    assert response.body["month"] == FOURTH_MONTH
+    assert response.body["gross_commission"] == pytest.approx(19_999.0)
+    assert response.body["subtotal"] == pytest.approx(19_999.0)
+    assert response.body["guarantee_applied"] is False
+    assert response.body["final_payout"] == pytest.approx(19_999.0)
+    assert response.body["final_payout"] < MINIMUM_GUARANTEE
+    top_up = response.body["final_payout"] - response.body["subtotal"]
+    assert top_up == pytest.approx(0.0)
 
 
 def test_guarantee_does_not_top_up_a_month_that_already_beats_it() -> None:
