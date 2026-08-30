@@ -173,8 +173,17 @@ def policy_factory(api_client: ApiClient) -> Iterator[Callable[..., dict]]:
 
 @pytest.fixture(scope="session")
 def browser_type_launch_args(browser_type_launch_args: dict) -> dict:
-    """Honour HEADLESS and SLOW_MO from the environment."""
-    return {**browser_type_launch_args, "headless": config.headless, "slow_mo": config.slow_mo}
+    """Honour HEADLESS, SLOW_MO and BROWSER_CHANNEL from the environment.
+
+    ``BROWSER_CHANNEL=chrome`` launches the browser already installed on the
+    machine instead of Playwright's bundled build -- the way out when the
+    bundled Chromium will not start.  Unset (the CI default) keeps the bundled
+    build, which is the one ``playwright install`` pins.
+    """
+    args = {**browser_type_launch_args, "headless": config.headless, "slow_mo": config.slow_mo}
+    if config.browser_channel:
+        args["channel"] = config.browser_channel
+    return args
 
 
 @pytest.fixture(scope="session")

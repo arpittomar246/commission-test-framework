@@ -31,6 +31,7 @@ class Config:
     headless: bool
     slow_mo: int
     db_path: Path
+    browser_channel: str | None
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -43,6 +44,7 @@ class Config:
             headless=_bool("HEADLESS", True),
             slow_mo=int(os.getenv("SLOW_MO", "0")),
             db_path=Path(os.getenv("DB_PATH", str(REPO_ROOT / "commission.db"))).resolve(),
+            browser_channel=os.getenv("BROWSER_CHANNEL") or None,
         )
 
 

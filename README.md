@@ -190,7 +190,12 @@ pytest -m api -n auto --dist loadfile
 | `TIMEOUT` | `10` (seconds) |
 | `HEADLESS` | `true` |
 | `SLOW_MO` | `0` (milliseconds, for watching a run) |
+| `BROWSER_CHANNEL` | unset — Playwright's bundled build; `chrome` uses the installed browser |
 | `DB_PATH` | `./commission.db` |
+
+If the bundled Chromium refuses to start — on Windows this surfaces as
+`side-by-side configuration is incorrect` — set `BROWSER_CHANNEL=chrome` to run
+against the Chrome already on the machine instead.
 
 ## Parallel execution
 
