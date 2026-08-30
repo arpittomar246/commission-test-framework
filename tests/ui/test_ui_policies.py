@@ -29,11 +29,23 @@ def _as_number(displayed: str) -> float:
 
 def test_policies_table_lists_every_policy(
     api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
     policies_page: PoliciesPage,
 ) -> None:
     """Each policy from the API gets a row."""
-    expected = {p["id"] for p in api_client.list_policies().body}
+    # Scoped to an agent this test owns. Comparing the table against every
+    # policy in the database races other workers under ``-n auto``, which are
+    # free to create and delete rows between the page load and the API call.
+    agent = agent_factory(name="Table Listing Agent")
+    for day in (4, 11, 18):
+        policy_factory(agent["id"], sold_date=f"{SOLD_DATE[:8]}{day:02d}")
+    policies_page.reload()
+    policies_page.filter_by_agent(agent["id"])
 
+    expected = {p["id"] for p in api_client.list_policies(agent_id=agent["id"]).body}
+
+    assert len(expected) == 3
     assert set(policies_page.row_ids()) == expected
     assert policies_page.row_count() == len(expected)
 
@@ -260,7 +272,10 @@ def test_add_policy_modal_lists_every_agent_in_its_dropdown(
     options = policies_page.agent_select_options()
     assert options[0] == "Select an agent"
     assert "Dropdown Agent" in options
-    assert len(options) == len(api_client.list_agents().body) + 1
+    # No count against the live agent list: other workers add and remove agents
+    # between this page load and any later call. Uniqueness is the invariant
+    # that actually matters -- fillAgentOptions() must not double-append.
+    assert len(options) == len(set(options))
 
 
 def test_creating_a_policy_adds_a_row_and_shows_a_success_toast(
@@ -270,14 +285,18 @@ def test_creating_a_policy_adds_a_row_and_shows_a_success_toast(
     """A valid submission closes the modal, refreshes the table and toasts."""
     agent = agent_factory(name="Creator Agent")
     policies_page.reload()
-    before = policies_page.row_count()
+    # Filter to this test's own agent first, so the row count it watches cannot
+    # be moved by policies other workers create. The filter survives the
+    # re-render that follows a successful create.
+    policies_page.filter_by_agent(agent["id"])
+    expect(policies_page.rows()).to_have_count(0)
 
     policies_page.create_policy(agent["id"], "Northwind Ltd", "125000", SOLD_DATE)
 
     message = policies_page.wait_for_toast("success")
     assert message.startswith("Policy #")
     policies_page.wait_for_modal_closed(PoliciesPage.MODAL)
-    expect(policies_page.rows()).to_have_count(before + 1)
+    expect(policies_page.rows()).to_have_count(1)
 
     new_id = int(message.removeprefix("Policy #").split()[0])
     assert policies_page.customer_of(new_id) == "Northwind Ltd"

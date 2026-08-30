@@ -62,12 +62,21 @@ jobs:
           done
           echo "app never became healthy"; cat uvicorn.log; exit 1
 
-      - name: Run tests
+      # Two passes, because the `serial` marker means what it says: those tests
+      # empty the shared database and cannot run beside anything else.
+      - name: Run tests (parallel)
         run: |
-          pytest -m "${{ matrix.marker }}" \
+          pytest -m "(${{ matrix.marker }}) and not serial" \
             -n auto --dist loadfile \
             --alluredir=allure-results \
             --junitxml=junit-${{ matrix.suite }}.xml
+
+      - name: Run tests (serial)
+        run: |
+          pytest -m "(${{ matrix.marker }}) and serial" \
+            --alluredir=allure-results \
+            --junitxml=junit-${{ matrix.suite }}-serial.xml \
+            || [ $? -eq 5 ]   # exit 5 is "no serial tests in this suite"
 
       - name: Show app log on failure
         if: failure()
@@ -86,7 +95,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: junit-${{ matrix.suite }}
-          path: junit-${{ matrix.suite }}.xml
+          path: junit-${{ matrix.suite }}*.xml
           retention-days: 14
 
   badge:
