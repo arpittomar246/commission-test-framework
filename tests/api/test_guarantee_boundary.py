@@ -108,12 +108,48 @@ def test_fourth_month_is_outside_the_guarantee(
     assert top_up == pytest.approx(0.0)
 
 
-def test_guarantee_does_not_top_up_a_month_that_already_beats_it() -> None:
+def test_guarantee_does_not_top_up_a_month_that_already_beats_it(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Earnings above the minimum are paid in full, with no top-up flagged."""
+    agent = agent_factory(join_date=JOIN_DATE)
+    # Inside the window, but earning 35,000 -- the guarantee has nothing to add.
+    policy_factory(agent["id"], value=350_000, sold_date=f"{SECOND_MONTH}-12")
+
+    response = api_client.get_commission(agent["id"], SECOND_MONTH)
+
+    assert response.status == 200
+    assert response.body["gross_commission"] == pytest.approx(35_000.0)
+    assert response.body["subtotal"] == pytest.approx(35_000.0)
+    assert response.body["guarantee_applied"] is False
+    assert response.body["final_payout"] == pytest.approx(35_000.0)
+    assert response.body["final_payout"] > MINIMUM_GUARANTEE
+    top_up = response.body["final_payout"] - response.body["subtotal"]
+    assert top_up == pytest.approx(0.0)
 
 
-def test_guarantee_flag_is_false_when_earnings_exactly_equal_the_minimum() -> None:
+def test_guarantee_flag_is_false_when_earnings_exactly_equal_the_minimum(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Landing exactly on 20,000 is earned, not guaranteed."""
+    agent = agent_factory(join_date=JOIN_DATE)
+    # Exactly the guarantee, to the rupee: max() returns the same number either
+    # way, so only the flag can say whether the guarantee did any work.
+    policy_factory(agent["id"], value=200_000, sold_date=f"{SECOND_MONTH}-12")
+
+    response = api_client.get_commission(agent["id"], SECOND_MONTH)
+
+    assert response.status == 200
+    assert response.body["gross_commission"] == pytest.approx(MINIMUM_GUARANTEE)
+    assert response.body["subtotal"] == pytest.approx(MINIMUM_GUARANTEE)
+    assert response.body["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
+    assert response.body["guarantee_applied"] is False
+    top_up = response.body["final_payout"] - response.body["subtotal"]
+    assert top_up == pytest.approx(0.0)
 
 
 def test_zero_sales_inside_the_window_still_pay_the_minimum() -> None:
