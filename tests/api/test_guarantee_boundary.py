@@ -14,6 +14,7 @@ pytestmark = pytest.mark.api
 
 JOIN_DATE = "2024-03-10"
 JOIN_MONTH = "2024-03"
+SECOND_MONTH = "2024-04"
 MINIMUM_GUARANTEE = 20_000.0
 
 
@@ -36,8 +37,27 @@ def test_join_month_is_covered_by_the_guarantee(
     assert response.body["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
 
 
-def test_second_month_is_covered_by_the_guarantee() -> None:
+def test_second_month_is_covered_by_the_guarantee(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Month 1 is still inside the window."""
+    agent = agent_factory(join_date=JOIN_DATE)
+    # A strong join month, to prove the guarantee is judged per month rather
+    # than against everything earned since joining.
+    policy_factory(agent["id"], value=500_000, sold_date=f"{JOIN_MONTH}-20")
+    policy_factory(agent["id"], value=80_000, sold_date=f"{SECOND_MONTH}-05")
+
+    response = api_client.get_commission(agent["id"], SECOND_MONTH)
+
+    assert response.status == 200
+    assert response.body["month"] == SECOND_MONTH
+    assert response.body["policy_count"] == 1
+    assert response.body["gross_commission"] == pytest.approx(8_000.0)
+    assert response.body["subtotal"] == pytest.approx(8_000.0)
+    assert response.body["guarantee_applied"] is True
+    assert response.body["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
 
 
 def test_third_month_is_the_last_covered_month() -> None:
