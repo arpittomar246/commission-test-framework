@@ -4,6 +4,7 @@ The guarantee covers the join month and the two months after it, and lapses
 from the fourth month onward.
 """
 
+from datetime import date
 from typing import Callable
 
 import pytest
@@ -11,6 +12,9 @@ import pytest
 from framework.api_client import ApiClient
 
 pytestmark = pytest.mark.api
+
+# Long enough ago that the window has lapsed under any reading of the rule.
+SETTLED_JOIN_DATE = "2023-01-10"
 
 JOIN_DATE = "2024-03-10"
 JOIN_MONTH = "2024-03"
@@ -252,5 +256,34 @@ def test_guarantee_window_is_measured_in_calendar_months_not_days(
     assert april.body["final_payout"] == pytest.approx(5_000.0)
 
 
-def test_guarantee_flag_reported_on_the_agent_record_matches_the_calculation() -> None:
+def test_guarantee_flag_reported_on_the_agent_record_matches_the_calculation(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+) -> None:
     """The agent's guarantee_active field agrees with the current month's breakdown."""
+    # The only test here anchored to today: guarantee_active on the agent record
+    # is always reported for the current month, so the query has to follow it.
+    this_month = date.today().strftime("%Y-%m")
+    fresh = agent_factory(join_date=date.today().isoformat())
+    settled = agent_factory(join_date=SETTLED_JOIN_DATE)
+
+    fresh_record = api_client.get_agent(fresh["id"]).body
+    settled_record = api_client.get_agent(settled["id"]).body
+    fresh_breakdown = api_client.get_commission(fresh["id"], this_month).body
+    settled_breakdown = api_client.get_commission(settled["id"], this_month).body
+
+    assert fresh_record["guarantee_active"] is True
+    assert fresh_record["months_active"] == 0
+    assert settled_record["guarantee_active"] is False
+
+    # Neither has sold anything, so the record's flag alone decides the payout.
+    assert fresh_breakdown["guarantee_applied"] is True
+    assert fresh_breakdown["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
+    assert settled_breakdown["guarantee_applied"] is False
+    assert settled_breakdown["final_payout"] == pytest.approx(0.0)
+
+    # The invariant tying the two endpoints together: a month can only have the
+    # guarantee applied while the agent record says the window is open.
+    for record, breakdown in ((fresh_record, fresh_breakdown), (settled_record, settled_breakdown)):
+        if breakdown["guarantee_applied"]:
+            assert record["guarantee_active"] is True
