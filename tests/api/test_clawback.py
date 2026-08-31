@@ -5,13 +5,42 @@ was *sold*, never the month it was cancelled -- and it can never push a payout
 below the minimum guarantee while that guarantee is in force.
 """
 
+from typing import Callable
+
 import pytest
+
+from framework.api_client import ApiClient
 
 pytestmark = pytest.mark.api
 
+# Settled agents throughout this file unless a test is specifically about the
+# guarantee floor: with the window shut, a clawback is visible in the payout
+# instead of being absorbed by the minimum.
+SETTLED_JOIN_DATE = "2023-01-10"
+MONTH = "2024-05"
 
-def test_cancelling_a_policy_reverses_its_commission() -> None:
+
+def test_cancelling_a_policy_reverses_its_commission(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """The clawback equals 10% of the cancelled policy's value."""
+    agent = agent_factory(join_date=SETTLED_JOIN_DATE)
+    # Two policies, one cancelled, so the clawback can be told apart from the
+    # earnings it is subtracted from.
+    policy_factory(agent["id"], value=400_000, sold_date=f"{MONTH}-06")
+    policy_factory(agent["id"], value=150_000, sold_date=f"{MONTH}-14", cancelled=True)
+
+    response = api_client.get_commission(agent["id"], MONTH)
+
+    assert response.status == 200
+    assert response.body["policy_count"] == 2
+    assert response.body["gross_commission"] == pytest.approx(55_000.0)
+    assert response.body["clawback"] == pytest.approx(15_000.0)
+    assert response.body["subtotal"] == pytest.approx(40_000.0)
+    assert response.body["guarantee_applied"] is False
+    assert response.body["final_payout"] == pytest.approx(40_000.0)
 
 
 def test_clawback_lands_in_the_month_the_policy_was_sold() -> None:
