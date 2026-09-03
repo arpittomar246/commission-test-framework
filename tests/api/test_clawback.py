@@ -20,6 +20,12 @@ pytestmark = pytest.mark.api
 SETTLED_JOIN_DATE = "2023-01-10"
 MONTH = "2024-05"
 
+# For the rule-4 tests: an agent whose GUARANTEE_MONTH is month 1, still well
+# inside the three-month window.
+GUARANTEE_JOIN_DATE = "2024-03-10"
+GUARANTEE_MONTH = "2024-04"
+MINIMUM_GUARANTEE = 20_000.0
+
 
 def test_cancelling_a_policy_reverses_its_commission(
     api_client: ApiClient,
@@ -158,8 +164,33 @@ def test_multiple_cancellations_in_one_month_accumulate(
     assert response.body["final_payout"] == pytest.approx(40_000.0)
 
 
-def test_clawback_cannot_push_payout_below_the_guarantee() -> None:
+def test_clawback_cannot_push_payout_below_the_guarantee(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Inside the window, a heavy clawback still pays the minimum."""
+    agent = agent_factory(join_date=GUARANTEE_JOIN_DATE)
+    # Gross clears the floor comfortably, but the surviving policy alone does
+    # not: the drop below the minimum is caused by the clawback and nothing else.
+    policy_factory(agent["id"], value=150_000, sold_date=f"{GUARANTEE_MONTH}-06")
+    policy_factory(agent["id"], value=250_000, sold_date=f"{GUARANTEE_MONTH}-19", cancelled=True)
+
+    response = api_client.get_commission(agent["id"], GUARANTEE_MONTH)
+
+    assert response.status == 200
+    assert response.body["gross_commission"] == pytest.approx(40_000.0)
+    assert response.body["gross_commission"] > MINIMUM_GUARANTEE
+    assert response.body["clawback"] == pytest.approx(25_000.0)
+
+    # The clawback is applied in full -- it is the payout that is floored, not
+    # the clawback that is trimmed to fit.
+    assert response.body["subtotal"] == pytest.approx(15_000.0)
+    assert response.body["subtotal"] < MINIMUM_GUARANTEE
+    assert response.body["guarantee_applied"] is True
+    assert response.body["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
+    top_up = response.body["final_payout"] - response.body["subtotal"]
+    assert top_up == pytest.approx(5_000.0)
 
 
 def test_full_clawback_inside_the_window_still_pays_the_guarantee() -> None:
