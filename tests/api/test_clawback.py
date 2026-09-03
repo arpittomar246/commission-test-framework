@@ -95,8 +95,39 @@ def test_clawback_does_not_touch_the_month_of_cancellation(
     assert response.body["final_payout"] == pytest.approx(25_000.0)
 
 
-def test_cancelled_policy_still_counts_toward_gross_commission() -> None:
+def test_cancelled_policy_still_counts_toward_gross_commission(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Gross is recorded before the clawback is subtracted."""
+    # Two agents selling exactly the same book; only one of them cancels
+    # anything. Gross has to come out identical, because gross describes what
+    # was sold -- the cancellation is a separate line beneath it.
+    sales = [200_000, 300_000, 100_000]
+    cancelling = agent_factory(name="Cancels One", join_date=SETTLED_JOIN_DATE)
+    keeping = agent_factory(name="Cancels Nothing", join_date=SETTLED_JOIN_DATE)
+
+    for day, value in enumerate(sales, start=7):
+        policy_factory(
+            cancelling["id"], value=value, sold_date=f"{MONTH}-{day:02d}",
+            cancelled=(value == 300_000),
+        )
+        policy_factory(keeping["id"], value=value, sold_date=f"{MONTH}-{day:02d}")
+
+    cancelled_book = api_client.get_commission(cancelling["id"], MONTH).body
+    intact_book = api_client.get_commission(keeping["id"], MONTH).body
+
+    # The line that survives a cancellation untouched.
+    assert cancelled_book["gross_commission"] == pytest.approx(60_000.0)
+    assert cancelled_book["gross_commission"] == pytest.approx(intact_book["gross_commission"])
+    assert cancelled_book["policy_count"] == intact_book["policy_count"] == len(sales)
+
+    # The lines that do not.
+    assert cancelled_book["clawback"] == pytest.approx(30_000.0)
+    assert intact_book["clawback"] == pytest.approx(0.0)
+    assert cancelled_book["subtotal"] == pytest.approx(30_000.0)
+    assert intact_book["subtotal"] == pytest.approx(60_000.0)
 
 
 def test_multiple_cancellations_in_one_month_accumulate() -> None:
