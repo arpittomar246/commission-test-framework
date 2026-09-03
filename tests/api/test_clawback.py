@@ -68,8 +68,31 @@ def test_clawback_lands_in_the_month_the_policy_was_sold(
     assert response.body["final_payout"] == pytest.approx(0.0)
 
 
-def test_clawback_does_not_touch_the_month_of_cancellation() -> None:
+def test_clawback_does_not_touch_the_month_of_cancellation(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """The month the cancellation happened in is left unchanged."""
+    today = date.today()
+    this_month = today.strftime("%Y-%m")
+    agent = agent_factory(join_date=SETTLED_JOIN_DATE)
+
+    # Cancelled now, but sold back in 2024-05 -- the reversal belongs there.
+    policy_factory(agent["id"], value=300_000, sold_date=f"{MONTH}-15", cancelled=True)
+    # Sold this month and left alone, so the current month has earnings of its
+    # own that a misplaced clawback would visibly eat into.
+    policy_factory(agent["id"], value=250_000, sold_date=today.isoformat())
+
+    response = api_client.get_commission(agent["id"], this_month)
+
+    assert response.status == 200
+    assert response.body["month"] == this_month
+    assert response.body["policy_count"] == 1
+    assert response.body["clawback"] == pytest.approx(0.0)
+    assert response.body["gross_commission"] == pytest.approx(25_000.0)
+    assert response.body["subtotal"] == pytest.approx(25_000.0)
+    assert response.body["final_payout"] == pytest.approx(25_000.0)
 
 
 def test_cancelled_policy_still_counts_toward_gross_commission() -> None:
