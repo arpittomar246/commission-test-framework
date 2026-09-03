@@ -130,8 +130,32 @@ def test_cancelled_policy_still_counts_toward_gross_commission(
     assert intact_book["subtotal"] == pytest.approx(60_000.0)
 
 
-def test_multiple_cancellations_in_one_month_accumulate() -> None:
+def test_multiple_cancellations_in_one_month_accumulate(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Two clawbacks in a month are added together."""
+    agent = agent_factory(join_date=SETTLED_JOIN_DATE)
+    # Two different cancelled values, so a sum is distinguishable from either
+    # one alone -- last-wins and max-wins both land on a single value.
+    cancelled_values = [90_000, 250_000]
+    policy_factory(agent["id"], value=400_000, sold_date=f"{MONTH}-04")
+    for day, value in zip((12, 21), cancelled_values):
+        policy_factory(agent["id"], value=value, sold_date=f"{MONTH}-{day}", cancelled=True)
+
+    response = api_client.get_commission(agent["id"], MONTH)
+    reversals = [round(value * 0.10, 2) for value in cancelled_values]
+
+    assert response.status == 200
+    assert response.body["policy_count"] == 3
+    assert response.body["gross_commission"] == pytest.approx(74_000.0)
+    assert response.body["clawback"] == pytest.approx(sum(reversals))
+    assert response.body["clawback"] == pytest.approx(34_000.0)
+    # Neither reversal alone, and not the larger of the two.
+    assert response.body["clawback"] > max(reversals)
+    assert response.body["subtotal"] == pytest.approx(40_000.0)
+    assert response.body["final_payout"] == pytest.approx(40_000.0)
 
 
 def test_clawback_cannot_push_payout_below_the_guarantee() -> None:
