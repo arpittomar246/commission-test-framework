@@ -5,6 +5,7 @@ was *sold*, never the month it was cancelled -- and it can never push a payout
 below the minimum guarantee while that guarantee is in force.
 """
 
+from datetime import date
 from typing import Callable
 
 import pytest
@@ -43,8 +44,28 @@ def test_cancelling_a_policy_reverses_its_commission(
     assert response.body["final_payout"] == pytest.approx(40_000.0)
 
 
-def test_clawback_lands_in_the_month_the_policy_was_sold() -> None:
+def test_clawback_lands_in_the_month_the_policy_was_sold(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Cancelling in a later month still reduces the month of sale."""
+    agent = agent_factory(join_date=SETTLED_JOIN_DATE)
+    # There is no way to backdate a cancellation -- cancel_policy() always
+    # happens now, long after this policy's 2024-05 sale. That gap is the test.
+    policy = policy_factory(agent["id"], value=300_000, sold_date=f"{MONTH}-15", cancelled=True)
+
+    assert policy["status"] == "cancelled"
+    assert date.today().strftime("%Y-%m") != MONTH, "the sale must predate the cancellation"
+
+    response = api_client.get_commission(agent["id"], MONTH)
+
+    assert response.status == 200
+    assert response.body["policy_count"] == 1
+    assert response.body["gross_commission"] == pytest.approx(30_000.0)
+    assert response.body["clawback"] == pytest.approx(30_000.0)
+    assert response.body["subtotal"] == pytest.approx(0.0)
+    assert response.body["final_payout"] == pytest.approx(0.0)
 
 
 def test_clawback_does_not_touch_the_month_of_cancellation() -> None:
