@@ -278,5 +278,31 @@ def test_clawback_is_zero_when_nothing_was_cancelled(
     assert response.body["final_payout"] == pytest.approx(45_000.0)
 
 
-def test_cancelling_a_policy_removes_it_from_the_active_listing() -> None:
+def test_cancelling_a_policy_removes_it_from_the_active_listing(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """The cancelled policy stops appearing under ?status=active."""
+    # Every query is scoped to this agent: the listing endpoint returns the
+    # whole table, which other workers are free to add to under ``-n auto``.
+    agent = agent_factory(join_date=SETTLED_JOIN_DATE)
+    kept = policy_factory(agent["id"], value=200_000, sold_date=f"{MONTH}-09")
+    cancelled = policy_factory(
+        agent["id"], value=300_000, sold_date=f"{MONTH}-17", cancelled=True
+    )
+
+    def ids_for(status: str | None) -> set[int]:
+        response = api_client.list_policies(agent_id=agent["id"], status=status)
+        assert response.status == 200
+        return {p["id"] for p in response.body}
+
+    assert ids_for("active") == {kept["id"]}
+    assert ids_for("cancelled") == {cancelled["id"]}
+    # Cancelling moves a policy between buckets; it never removes it.
+    assert ids_for(None) == {kept["id"], cancelled["id"]}
+
+    listed = {p["id"]: p for p in api_client.list_policies(agent_id=agent["id"]).body}
+    assert listed[kept["id"]]["status"] == "active"
+    assert listed[cancelled["id"]]["status"] == "cancelled"
+    assert listed[cancelled["id"]]["value"] == pytest.approx(300_000.0)
