@@ -251,8 +251,31 @@ def test_clawback_exceeding_gross_outside_the_window_floors_at_zero(
     assert response.body["final_payout"] >= 0.0
 
 
-def test_clawback_is_zero_when_nothing_was_cancelled() -> None:
+def test_clawback_is_zero_when_nothing_was_cancelled(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """An untouched month reports no clawback."""
+    agent = agent_factory(join_date=SETTLED_JOIN_DATE)
+    for day, value in ((5, 200_000), (13, 150_000), (26, 100_000)):
+        policy_factory(agent["id"], value=value, sold_date=f"{MONTH}-{day:02d}")
+    # A cancellation in a different month, so the zero below has to mean "not
+    # in this month" rather than "this agent has never cancelled anything".
+    policy_factory(agent["id"], value=300_000, sold_date="2024-06-11", cancelled=True)
+
+    response = api_client.get_commission(agent["id"], MONTH)
+
+    assert response.status == 200
+    assert "clawback" in response.body
+    assert response.body["clawback"] == 0.0
+    assert response.body["policy_count"] == 3
+    assert response.body["gross_commission"] == pytest.approx(45_000.0)
+
+    # With nothing reversed, the subtotal is the gross untouched.
+    assert response.body["subtotal"] == pytest.approx(response.body["gross_commission"])
+    assert response.body["guarantee_applied"] is False
+    assert response.body["final_payout"] == pytest.approx(45_000.0)
 
 
 def test_cancelling_a_policy_removes_it_from_the_active_listing() -> None:
