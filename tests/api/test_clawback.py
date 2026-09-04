@@ -193,8 +193,33 @@ def test_clawback_cannot_push_payout_below_the_guarantee(
     assert top_up == pytest.approx(5_000.0)
 
 
-def test_full_clawback_inside_the_window_still_pays_the_guarantee() -> None:
+def test_full_clawback_inside_the_window_still_pays_the_guarantee(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Cancelling every policy in a guaranteed month leaves the minimum intact."""
+    agent = agent_factory(join_date=GUARANTEE_JOIN_DATE)
+    # Nothing survives, so the subtotal is exactly zero and the guarantee is
+    # carrying the whole payout -- the heaviest case the floor has to absorb.
+    for day, value in ((8, 350_000), (23, 150_000)):
+        policy_factory(
+            agent["id"], value=value, sold_date=f"{GUARANTEE_MONTH}-{day:02d}", cancelled=True
+        )
+
+    response = api_client.get_commission(agent["id"], GUARANTEE_MONTH)
+
+    assert response.status == 200
+    assert response.body["policy_count"] == 2
+    assert response.body["gross_commission"] == pytest.approx(50_000.0)
+    assert response.body["clawback"] == pytest.approx(50_000.0)
+    # Everything earned was reversed, so these two lines have to agree.
+    assert response.body["clawback"] == pytest.approx(response.body["gross_commission"])
+    assert response.body["subtotal"] == pytest.approx(0.0)
+    assert response.body["guarantee_applied"] is True
+    assert response.body["final_payout"] == pytest.approx(MINIMUM_GUARANTEE)
+    top_up = response.body["final_payout"] - response.body["subtotal"]
+    assert top_up == pytest.approx(MINIMUM_GUARANTEE)
 
 
 def test_clawback_exceeding_gross_outside_the_window_floors_at_zero() -> None:
