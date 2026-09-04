@@ -222,8 +222,33 @@ def test_full_clawback_inside_the_window_still_pays_the_guarantee(
     assert top_up == pytest.approx(MINIMUM_GUARANTEE)
 
 
-def test_clawback_exceeding_gross_outside_the_window_floors_at_zero() -> None:
+def test_clawback_exceeding_gross_outside_the_window_floors_at_zero(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """An established agent is never left with a negative payout."""
+    # The same fully reversed month as the test above, but settled: with no
+    # guarantee to catch it, the payout stops at zero rather than at 20,000.
+    agent = agent_factory(join_date=SETTLED_JOIN_DATE)
+    for day, value in ((8, 350_000), (23, 150_000)):
+        policy_factory(
+            agent["id"], value=value, sold_date=f"{MONTH}-{day:02d}", cancelled=True
+        )
+
+    response = api_client.get_commission(agent["id"], MONTH)
+
+    assert response.status == 200
+    assert response.body["gross_commission"] == pytest.approx(50_000.0)
+    assert response.body["clawback"] == pytest.approx(50_000.0)
+    assert response.body["subtotal"] == pytest.approx(0.0)
+    assert response.body["guarantee_applied"] is False
+    assert response.body["final_payout"] == pytest.approx(0.0)
+
+    # The decision the README records: the agent is never asked to pay money
+    # back, so neither line may go negative however heavy the reversal.
+    assert response.body["subtotal"] >= 0.0
+    assert response.body["final_payout"] >= 0.0
 
 
 def test_clawback_is_zero_when_nothing_was_cancelled() -> None:
