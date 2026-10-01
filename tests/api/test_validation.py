@@ -40,8 +40,28 @@ def test_policy_value_of_zero_is_rejected(
     assert listed.body == []
 
 
-def test_negative_policy_value_is_rejected() -> None:
+def test_negative_policy_value_is_rejected(
+    api_client: ApiClient,
+    new_agent: dict,
+) -> None:
     """A negative policy value returns 400."""
+    # Both ends of the negative range: a hair below zero, where a ``< 0``
+    # rounding slip would show, and a value too large to be an accident.
+    for value in (-0.01, -250_000):
+        response = api_client.create_policy(
+            agent_id=new_agent["id"],
+            customer_name="Negative Value Ltd",
+            value=value,
+            sold_date=SOLD_DATE,
+        )
+
+        assert response.status == 400, f"{value} was not rejected"
+        assert response.code == "INVALID_VALUE"
+        assert set(response.body) == ERROR_KEYS
+
+    listed = api_client.list_policies(agent_id=new_agent["id"])
+    assert listed.status == 200
+    assert listed.body == []
 
 
 def test_creating_a_policy_for_an_unknown_agent_returns_404() -> None:
