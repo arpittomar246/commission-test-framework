@@ -441,6 +441,16 @@ def test_non_numeric_policy_value_is_rejected(
         assert response.code == "VALIDATION_ERROR", f"{value!r} gave {response.code}"
         assert (response.detail or "").startswith("value:"), response.detail
 
+    # Floats the type check lets through but no policy can be worth. None of
+    # them fail `value <= 0` -- infinity is not <= 0, and NaN fails every
+    # comparison -- so the app has to check for them itself.
+    for value in ("NaN", "Infinity", "-Infinity", "1e400"):
+        response = api_client.create_policy_raw({**base, "value": value})
+
+        assert response.status == 400, f"{value!r} gave {response.status}"
+        assert response.code == "INVALID_VALUE", f"{value!r} gave {response.code}"
+        assert set(response.body) == ERROR_KEYS
+
     listed = api_client.list_policies(agent_id=new_agent["id"])
     assert listed.body == []
 
