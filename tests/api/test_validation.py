@@ -92,8 +92,23 @@ def test_creating_a_policy_for_an_unknown_agent_returns_404(
     assert listed.body == []
 
 
-def test_fetching_an_unknown_agent_returns_404() -> None:
+def test_fetching_an_unknown_agent_returns_404(
+    api_client: ApiClient,
+    new_agent: dict,
+) -> None:
     """Requesting a missing agent id returns 404."""
+    # Control first: the same route answers 200 for an agent that exists, so
+    # the 404 below is about absence rather than a broken route.
+    found = api_client.get_agent(new_agent["id"])
+    assert found.status == 200
+    assert found.body["id"] == new_agent["id"]
+
+    response = api_client.get_agent(MISSING_ID)
+
+    assert response.status == 404
+    assert response.code == "AGENT_NOT_FOUND"
+    assert str(MISSING_ID) in (response.detail or "")
+    assert set(response.body) == ERROR_KEYS
 
 
 def test_commission_for_an_unknown_agent_returns_404() -> None:
