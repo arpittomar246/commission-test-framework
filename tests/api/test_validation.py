@@ -249,8 +249,43 @@ def test_missing_required_policy_fields_are_rejected(
     assert api_client.create_policy_raw(complete).status == 201
 
 
-def test_invalid_email_is_rejected() -> None:
+def test_invalid_email_is_rejected(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    unique_email: Callable[[str], str],
+) -> None:
     """An unparseable email address returns 400."""
+    # Every bad address carries this token, so the persistence check at the
+    # end can look for it without racing other workers' agents.
+    token = unique_email("bad").split("@")[0]
+    malformed = [
+        token,                       # no @ at all
+        f"{token}@",                 # nothing after the @
+        f"@{token}.com",             # nothing before the @
+        f"{token}@example",          # domain without a dot
+        f"{token}@@example.com",     # two @ signs
+        f"{token} x@example.com",    # space in the local part
+        f"{token}@exa mple.com",     # space in the domain
+        f"{token}@example.com\nx",   # newline inside the address
+    ]
+    for email in malformed:
+        response = api_client.create_agent_raw(
+            {"name": "Bad Email", "email": email, "join_date": "2024-03-10"}
+        )
+
+        assert response.status == 400, f"{email!r} was not rejected"
+        assert response.code == "INVALID_EMAIL", f"{email!r} gave {response.code}"
+        assert set(response.body) == ERROR_KEYS
+
+    stored = [a["email"] for a in api_client.list_agents().body]
+    assert not [e for e in stored if token in e], "a rejected email was stored"
+
+    # Control: surrounding whitespace is trimmed rather than rejected, and the
+    # address is stored clean. This is why a trailing newline -- unlike in
+    # a month -- never reaches the pattern.
+    good = unique_email("good")
+    agent = agent_factory(email=f"  {good}\n")
+    assert agent["email"] == good
 
 
 def test_duplicate_email_is_rejected() -> None:
