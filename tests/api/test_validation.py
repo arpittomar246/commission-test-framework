@@ -4,13 +4,40 @@ Every failure comes back with the same body shape -- a detail and a code --
 and the status the endpoint contract promises.
 """
 
+from typing import Callable
+
 import pytest
+
+from framework.api_client import ApiClient
 
 pytestmark = [pytest.mark.api, pytest.mark.smoke]
 
+SOLD_DATE = "2024-05-12"
+ERROR_KEYS = {"detail", "code"}
 
-def test_policy_value_of_zero_is_rejected() -> None:
+
+def test_policy_value_of_zero_is_rejected(
+    api_client: ApiClient,
+    new_agent: dict,
+) -> None:
     """A zero-value policy returns 400."""
+    response = api_client.create_policy(
+        agent_id=new_agent["id"],
+        customer_name="Zero Value Ltd",
+        value=0,
+        sold_date=SOLD_DATE,
+    )
+
+    assert response.status == 400
+    assert response.code == "INVALID_VALUE"
+    assert "greater than zero" in (response.detail or "")
+    # The one error shape, with nothing else smuggled alongside it.
+    assert set(response.body) == ERROR_KEYS
+
+    # A rejected request must not leave a row behind.
+    listed = api_client.list_policies(agent_id=new_agent["id"])
+    assert listed.status == 200
+    assert listed.body == []
 
 
 def test_negative_policy_value_is_rejected() -> None:
