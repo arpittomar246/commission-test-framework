@@ -288,8 +288,31 @@ def test_invalid_email_is_rejected(
     assert agent["email"] == good
 
 
-def test_duplicate_email_is_rejected() -> None:
+def test_duplicate_email_is_rejected(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    unique_email: Callable[[str], str],
+) -> None:
     """Reusing an existing agent's email returns 409."""
+    email = unique_email("taken")
+    original = agent_factory(name="First Holder", email=email, join_date="2024-03-10")
+
+    # A different name and join date: the conflict is keyed on email alone.
+    exact = api_client.create_agent(name="Second Holder", email=email, join_date="2025-01-01")
+    assert exact.status == 409
+    assert exact.code == "DUPLICATE_EMAIL"
+    assert email in (exact.detail or "")
+    assert set(exact.body) == ERROR_KEYS
+
+    # Emails are trimmed before the lookup, so padding does not dodge it.
+    padded = api_client.create_agent(name="Third Holder", email=f"  {email}\n", join_date="2025-01-01")
+    assert padded.status == 409
+    assert padded.code == "DUPLICATE_EMAIL"
+
+    # The first agent is untouched, and is still the only one with the address.
+    holders = [a for a in api_client.list_agents().body if a["email"] == email]
+    assert [a["id"] for a in holders] == [original["id"]]
+    assert holders[0]["name"] == "First Holder"
 
 
 def test_cancelling_an_already_cancelled_policy_returns_409() -> None:
