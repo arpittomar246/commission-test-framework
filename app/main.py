@@ -19,7 +19,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import commission as rules
@@ -144,12 +144,14 @@ def _records(agent: Agent) -> list[rules.PolicyRecord]:
 def create_agent(payload: AgentCreate, db: Session = Depends(get_db)) -> AgentOut:
     """Create an agent."""
     name = payload.name.strip()
-    email = payload.email.strip()
+    # Lowercased so one inbox is one agent whatever casing is typed. The lookup
+    # lowers the stored side too, for rows saved before this rule existed.
+    email = payload.email.strip().lower()
     if not name:
         raise ApiError(400, "INVALID_NAME", "name must not be empty")
     if not EMAIL_PATTERN.match(email):
         raise ApiError(400, "INVALID_EMAIL", f"{payload.email} is not a valid email")
-    if db.scalar(select(Agent).where(Agent.email == email)) is not None:
+    if db.scalar(select(Agent).where(func.lower(Agent.email) == email)) is not None:
         raise ApiError(409, "DUPLICATE_EMAIL", f"{email} is already registered")
 
     agent = Agent(name=name, email=email, join_date=payload.join_date)
