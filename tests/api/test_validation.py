@@ -309,6 +309,17 @@ def test_duplicate_email_is_rejected(
     assert padded.status == 409
     assert padded.code == "DUPLICATE_EMAIL"
 
+    # Mail systems treat addresses case-insensitively in practice, so a change
+    # of case is the same inbox and has to be the same agent.
+    shouted = api_client.create_agent(name="Fourth Holder", email=email.upper(), join_date="2025-01-01")
+    assert shouted.status == 409
+    assert shouted.code == "DUPLICATE_EMAIL"
+
+    # And new addresses are stored lowercased, so the rule holds whichever
+    # casing arrives first.
+    mixed = unique_email("Mixed.Case")
+    assert agent_factory(email=mixed)["email"] == mixed.lower()
+
     # The first agent is untouched, and is still the only one with the address.
     holders = [a for a in api_client.list_agents().body if a["email"] == email]
     assert [a["id"] for a in holders] == [original["id"]]
