@@ -7,7 +7,8 @@ raises on a 4xx, because most of the interesting tests are about error
 responses.
 
 Only 5xx responses are retried, and only because a flaky server is never the
-thing under test.
+thing under test -- and only for reads. A write that fails may already have
+been saved, and sending it again would save it twice.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import requests
 from framework.config import Config, config as default_config
 
 RETRY_STATUSES = frozenset({500, 502, 503, 504})
+RETRY_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 @dataclass
@@ -80,7 +82,8 @@ class ApiClient:
         json: Any = None,
         params: dict[str, Any] | None = None,
     ) -> ApiResponse:
-        """Send one request, retrying only on 5xx, and record the timing."""
+        """Send one request, retrying reads on 5xx, and record the timing."""
+        retryable = method.upper() in RETRY_METHODS
         url = f"{self.base_url}{path}"
         attempt = 0
         while True:
@@ -91,7 +94,11 @@ class ApiClient:
             )
             elapsed_ms = (time.perf_counter() - started) * 1000
 
-            if response.status_code in RETRY_STATUSES and attempt <= self.max_retries:
+            if (
+                retryable
+                and response.status_code in RETRY_STATUSES
+                and attempt <= self.max_retries
+            ):
                 time.sleep(self.retry_backoff * attempt)
                 continue
 
