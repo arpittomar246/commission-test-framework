@@ -461,8 +461,46 @@ def test_non_numeric_policy_value_is_rejected(
     assert as_text.body["value"] == pytest.approx(100_000.0)
 
 
-def test_malformed_date_is_rejected() -> None:
+def test_malformed_date_is_rejected(
+    api_client: ApiClient,
+    new_agent: dict,
+) -> None:
     """A sold_date that is not a real date returns 400."""
+    base = {"agent_id": new_agent["id"], "customer_name": "Dated Ltd", "value": 100_000}
+
+    malformed = [
+        # Shaped like a date, but no such day exists.
+        "2023-02-29",           # 29 February in a year that is not a leap year
+        "2024-02-30",           # 30 February in any year
+        "2024-04-31",           # 31st of a 30-day month
+        "2024-13-01",           # month 13
+        "2024-00-10",           # month 0
+        # Real days written the wrong way.
+        "12/05/2024",           # ambiguous: 12 May or 5 December?
+        "2024-5-12",            # not zero-padded
+        "20240512",             # no separators
+        "2024-05-12T10:30:00",  # a moment, not a day
+        " 2024-05-12",          # leading space
+        "2024-05-12\n",         # trailing newline -- the slip that caught the month
+        # Not a date at all.
+        "",
+        None,
+    ]
+    for sold_date in malformed:
+        response = api_client.create_policy_raw({**base, "sold_date": sold_date})
+
+        assert response.status == 400, f"{sold_date!r} gave {response.status}"
+        assert response.code == "VALIDATION_ERROR", f"{sold_date!r} gave {response.code}"
+        assert (response.detail or "").startswith("sold_date:"), response.detail
+
+    listed = api_client.list_policies(agent_id=new_agent["id"])
+    assert listed.body == []
+
+    # Control, and the other half of the first case: 29 February in a leap
+    # year is a real day, and is stored as given.
+    leap = api_client.create_policy_raw({**base, "sold_date": "2024-02-29"})
+    assert leap.status == 201
+    assert leap.body["sold_date"] == "2024-02-29"
 
 
 def test_every_error_response_carries_a_code() -> None:
