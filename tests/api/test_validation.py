@@ -388,8 +388,33 @@ def test_cancelling_an_unknown_policy_returns_404(
     assert (garbled.detail or "").startswith("path.policy_id:"), garbled.detail
 
 
-def test_unknown_status_filter_is_rejected() -> None:
+def test_unknown_status_filter_is_rejected(
+    api_client: ApiClient,
+    new_agent: dict,
+) -> None:
     """An unrecognised status filter value returns 400."""
+    # Control: both real statuses are accepted.
+    for status in ("active", "cancelled"):
+        assert api_client.list_policies(agent_id=new_agent["id"], status=status).status == 200
+
+    unknown = [
+        "archived",   # a plausible status the app does not have
+        "ACTIVE",     # the match is exact, so case matters
+        " active",    # and so does whitespace
+        "",           # ?status= with nothing after it
+    ]
+    for status in unknown:
+        response = api_client.list_policies(status=status)
+
+        assert response.status == 400, f"{status!r} gave {response.status}"
+        assert response.code == "INVALID_STATUS"
+        assert set(response.body) == ERROR_KEYS
+
+    # The contrast worth knowing: an agent_id that matches nobody is not an
+    # error, just an empty result. Only the status has a fixed set of values.
+    nobody = api_client.list_policies(agent_id=MISSING_ID)
+    assert nobody.status == 200
+    assert nobody.body == []
 
 
 def test_non_numeric_policy_value_is_rejected() -> None:
