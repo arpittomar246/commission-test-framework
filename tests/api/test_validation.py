@@ -150,6 +150,7 @@ def test_malformed_month_is_rejected(
         "26-05",        # two-digit year
         "2026-05-01",   # a full date, not a month
         "May 2026",     # a human spelling
+        "2026-05\n",    # trailing newline: a bare `$` matches just before it
     ]
     for month in malformed:
         response = api_client.get_commission(new_agent["id"], month)
