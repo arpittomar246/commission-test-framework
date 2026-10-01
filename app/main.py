@@ -8,6 +8,7 @@ Every failure -- validation, missing row, conflicting state -- leaves through
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -183,6 +184,10 @@ def get_agent(agent_id: int, db: Session = Depends(get_db)) -> AgentOut:
 @app.post("/api/policies", response_model=PolicyOut, status_code=201)
 def create_policy(payload: PolicyCreate, db: Session = Depends(get_db)) -> PolicyOut:
     """Create a policy for an existing agent."""
+    # Before the sign check, which NaN and infinity both slip past. Left in,
+    # infinity was saved and then broke every commission call for the agent.
+    if not math.isfinite(payload.value):
+        raise ApiError(400, "INVALID_VALUE", "value must be a finite number")
     if payload.value <= 0:
         raise ApiError(400, "INVALID_VALUE", "value must be greater than zero")
     if not payload.customer_name.strip():
