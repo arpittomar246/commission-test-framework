@@ -4,6 +4,7 @@ Every failure comes back with the same body shape -- a detail and a code --
 and the status the endpoint contract promises.
 """
 
+import sqlite3
 from typing import Callable
 
 import pytest
@@ -326,8 +327,44 @@ def test_duplicate_email_is_rejected(
     assert holders[0]["name"] == "First Holder"
 
 
-def test_cancelling_an_already_cancelled_policy_returns_409() -> None:
+def test_cancelling_an_already_cancelled_policy_returns_409(
+    api_client: ApiClient,
+    app_config,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """The second cancellation of one policy conflicts."""
+    agent = agent_factory(join_date="2023-01-10")
+    policy = policy_factory(agent["id"], value=300_000, sold_date="2024-05-15")
+
+    first = api_client.cancel_policy(policy["id"])
+    assert first.status == 200
+    assert first.body["status"] == "cancelled"
+
+    def cancelled_at() -> str | None:
+        # Not part of the API response, so read it where it lives.
+        with sqlite3.connect(str(app_config.db_path)) as db:
+            row = db.execute(
+                "SELECT cancelled_at FROM policies WHERE id = ?", (policy["id"],)
+            ).fetchone()
+        return row[0]
+
+    stamped = cancelled_at()
+    assert stamped is not None
+
+    second = api_client.cancel_policy(policy["id"])
+
+    assert second.status == 409
+    assert second.code == "ALREADY_CANCELLED"
+    assert str(policy["id"]) in (second.detail or "")
+    assert set(second.body) == ERROR_KEYS
+
+    # The refused attempt changed nothing: the original timestamp stands, and
+    # the commission is clawed back once, not twice.
+    assert cancelled_at() == stamped
+    breakdown = api_client.get_commission(agent["id"], "2024-05").body
+    assert breakdown["clawback"] == pytest.approx(30_000.0)
+    assert breakdown["subtotal"] == pytest.approx(0.0)
 
 
 def test_cancelling_an_unknown_policy_returns_404() -> None:
