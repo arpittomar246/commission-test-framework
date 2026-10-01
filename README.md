@@ -98,7 +98,13 @@ Every failure returns the same shape, with the status the table promises:
 
 Codes in use: `VALIDATION_ERROR`, `INVALID_VALUE`, `INVALID_NAME`,
 `INVALID_EMAIL`, `INVALID_CUSTOMER`, `INVALID_MONTH`, `INVALID_STATUS`,
-`AGENT_NOT_FOUND`, `POLICY_NOT_FOUND`, `DUPLICATE_EMAIL`, `ALREADY_CANCELLED`.
+`AGENT_NOT_FOUND`, `POLICY_NOT_FOUND`, `DUPLICATE_EMAIL`, `ALREADY_CANCELLED`,
+`ROUTE_NOT_FOUND`, `METHOD_NOT_ALLOWED`.
+
+The last two cover requests under `/api` that match no route or use the wrong
+method. Anything else FastAPI raises itself under `/api` comes back as
+`HTTP_ERROR`. Paths outside `/api` -- the HTML pages -- keep FastAPI's default
+error responses.
 
 Note that malformed payloads come back as **400**, not FastAPI's default 422 —
 a handler rewrites them so the error contract holds everywhere.

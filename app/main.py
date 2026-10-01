@@ -16,12 +16,14 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import commission as rules
 from app.database import get_db, init_db
@@ -77,6 +79,29 @@ async def validation_handler(_: Request, exc: RequestValidationError) -> JSONRes
     first = exc.errors()[0]
     field = ".".join(str(part) for part in first["loc"] if part != "body")
     return error(400, "VALIDATION_ERROR", f"{field or 'payload'}: {first['msg']}")
+
+
+HTTP_ERROR_CODES = {404: "ROUTE_NOT_FOUND", 405: "METHOD_NOT_ALLOWED"}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error_handler(request: Request, exc: StarletteHTTPException):
+    """Give requests that match no API route the same coded error shape.
+
+    Only under /api: a mistyped page URL in a browser keeps FastAPI's default
+    response rather than a raw JSON body.
+    """
+    if not request.url.path.startswith("/api/"):
+        return await http_exception_handler(request, exc)
+    response = error(
+        exc.status_code,
+        HTTP_ERROR_CODES.get(exc.status_code, "HTTP_ERROR"),
+        str(exc.detail),
+    )
+    # Keep headers such as Allow, which tells the client what a 405 would accept.
+    if exc.headers:
+        response.headers.update(exc.headers)
+    return response
 
 
 # --------------------------------------------------------------------------- #
