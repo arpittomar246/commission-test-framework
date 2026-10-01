@@ -133,8 +133,31 @@ def test_commission_for_an_unknown_agent_returns_404(
     assert set(history.body) == ERROR_KEYS
 
 
-def test_malformed_month_is_rejected() -> None:
+def test_malformed_month_is_rejected(
+    api_client: ApiClient,
+    new_agent: dict,
+) -> None:
     """A month like 2026-13 returns 400."""
+    # Control: a well-formed month for the same agent is answered normally.
+    assert api_client.get_commission(new_agent["id"], "2026-05").status == 200
+
+    # Near-misses against ^\d{4}-(0[1-9]|1[0-2])$, each failing a different part.
+    malformed = [
+        "2026-13",      # month past December
+        "2026-00",      # month before January
+        "2026-5",       # month not zero-padded
+        "2026/05",      # wrong separator
+        "26-05",        # two-digit year
+        "2026-05-01",   # a full date, not a month
+        "May 2026",     # a human spelling
+    ]
+    for month in malformed:
+        response = api_client.get_commission(new_agent["id"], month)
+
+        assert response.status == 400, f"{month!r} was not rejected"
+        assert response.code == "INVALID_MONTH", f"{month!r} gave {response.code}"
+        assert "YYYY-MM" in (response.detail or "")
+        assert set(response.body) == ERROR_KEYS
 
 
 def test_missing_month_parameter_is_rejected() -> None:
