@@ -161,8 +161,30 @@ def test_malformed_month_is_rejected(
         assert set(response.body) == ERROR_KEYS
 
 
-def test_missing_month_parameter_is_rejected() -> None:
+def test_missing_month_parameter_is_rejected(
+    api_client: ApiClient,
+    new_agent: dict,
+) -> None:
     """Omitting the month query parameter returns 400."""
+    # get_commission() always sends ?month=, so drop to the raw request.
+    for path in (
+        f"/agents/{new_agent['id']}/commission",
+        f"/agents/{new_agent['id']}/commission/history",
+    ):
+        response = api_client.request("GET", path)
+
+        # FastAPI's default here is 422; the app rewrites it so the error
+        # contract holds for framework-level failures too.
+        assert response.status == 400, f"{path} gave {response.status}"
+        assert response.code == "VALIDATION_ERROR"
+        assert "month" in (response.detail or "")
+        assert set(response.body) == ERROR_KEYS
+
+    # The reverse of the unknown-agent test: request validation runs before the
+    # handler, so a missing month beats a missing agent.
+    both_wrong = api_client.request("GET", f"/agents/{MISSING_ID}/commission")
+    assert both_wrong.status == 400
+    assert both_wrong.code == "VALIDATION_ERROR"
 
 
 def test_missing_required_agent_fields_are_rejected() -> None:
