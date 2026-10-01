@@ -15,6 +15,10 @@ pytestmark = [pytest.mark.api, pytest.mark.smoke]
 SOLD_DATE = "2024-05-12"
 ERROR_KEYS = {"detail", "code"}
 
+# Far beyond any id SQLite will hand out in a test run. Picking "highest id
+# plus one" instead would race other workers creating rows under -n auto.
+MISSING_ID = 999_999_999
+
 
 def test_policy_value_of_zero_is_rejected(
     api_client: ApiClient,
@@ -64,8 +68,28 @@ def test_negative_policy_value_is_rejected(
     assert listed.body == []
 
 
-def test_creating_a_policy_for_an_unknown_agent_returns_404() -> None:
+def test_creating_a_policy_for_an_unknown_agent_returns_404(
+    api_client: ApiClient,
+) -> None:
     """An agent_id with no matching agent returns 404."""
+    # Everything else in the payload is valid, so the missing agent is the
+    # only reason left for the request to fail.
+    response = api_client.create_policy(
+        agent_id=MISSING_ID,
+        customer_name="Orphan Policy Ltd",
+        value=100_000,
+        sold_date=SOLD_DATE,
+    )
+
+    assert response.status == 404
+    assert response.code == "AGENT_NOT_FOUND"
+    assert str(MISSING_ID) in (response.detail or "")
+    assert set(response.body) == ERROR_KEYS
+
+    # No orphaned row pointing at an agent that does not exist.
+    listed = api_client.list_policies(agent_id=MISSING_ID)
+    assert listed.status == 200
+    assert listed.body == []
 
 
 def test_fetching_an_unknown_agent_returns_404() -> None:
