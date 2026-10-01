@@ -111,8 +111,26 @@ def test_fetching_an_unknown_agent_returns_404(
     assert set(response.body) == ERROR_KEYS
 
 
-def test_commission_for_an_unknown_agent_returns_404() -> None:
+def test_commission_for_an_unknown_agent_returns_404(
+    api_client: ApiClient,
+) -> None:
     """The commission endpoint 404s for a missing agent."""
+    breakdown = api_client.get_commission(MISSING_ID, "2024-05")
+    assert breakdown.status == 404
+    assert breakdown.code == "AGENT_NOT_FOUND"
+    assert set(breakdown.body) == ERROR_KEYS
+
+    # Both problems at once: the agent is looked up before the month is
+    # parsed, so the missing agent is what gets reported.
+    both_wrong = api_client.get_commission(MISSING_ID, "2026-13")
+    assert both_wrong.status == 404
+    assert both_wrong.code == "AGENT_NOT_FOUND"
+
+    # The six-month history behind the chart goes through the same lookup.
+    history = api_client.get_commission_history(MISSING_ID, "2024-05")
+    assert history.status == 404
+    assert history.code == "AGENT_NOT_FOUND"
+    assert set(history.body) == ERROR_KEYS
 
 
 def test_malformed_month_is_rejected() -> None:
