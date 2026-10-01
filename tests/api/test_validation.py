@@ -417,8 +417,38 @@ def test_unknown_status_filter_is_rejected(
     assert nobody.body == []
 
 
-def test_non_numeric_policy_value_is_rejected() -> None:
+def test_non_numeric_policy_value_is_rejected(
+    api_client: ApiClient,
+    new_agent: dict,
+) -> None:
     """A value that is not a number returns 400."""
+    base = {"agent_id": new_agent["id"], "customer_name": "Typed Ltd", "sold_date": SOLD_DATE}
+
+    not_numbers = [
+        "lots",       # a word
+        "100,000",    # a number with grouping, as a person would write it
+        "",           # an empty string
+        None,         # JSON null
+        [],           # a list
+        {},           # an object
+    ]
+    for value in not_numbers:
+        response = api_client.create_policy_raw({**base, "value": value})
+
+        assert response.status == 400, f"{value!r} gave {response.status}"
+        # Caught by type checking before the route runs, so this is the
+        # framework-level code -- not INVALID_VALUE from the `value <= 0` check.
+        assert response.code == "VALIDATION_ERROR", f"{value!r} gave {response.code}"
+        assert (response.detail or "").startswith("value:"), response.detail
+
+    listed = api_client.list_policies(agent_id=new_agent["id"])
+    assert listed.body == []
+
+    # Control: a number sent as a string is still a number. Pydantic converts
+    # it, and the policy is stored with the numeric value.
+    as_text = api_client.create_policy_raw({**base, "value": "100000"})
+    assert as_text.status == 201
+    assert as_text.body["value"] == pytest.approx(100_000.0)
 
 
 def test_malformed_date_is_rejected() -> None:
