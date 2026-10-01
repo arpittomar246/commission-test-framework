@@ -367,8 +367,25 @@ def test_cancelling_an_already_cancelled_policy_returns_409(
     assert breakdown["subtotal"] == pytest.approx(0.0)
 
 
-def test_cancelling_an_unknown_policy_returns_404() -> None:
+def test_cancelling_an_unknown_policy_returns_404(
+    api_client: ApiClient,
+) -> None:
     """Cancelling a policy id that does not exist returns 404."""
+    response = api_client.cancel_policy(MISSING_ID)
+
+    assert response.status == 404
+    # Its own code, not AGENT_NOT_FOUND: a client can tell which id was wrong.
+    assert response.code == "POLICY_NOT_FOUND"
+    assert str(MISSING_ID) in (response.detail or "")
+    assert set(response.body) == ERROR_KEYS
+
+    # An id that is not even a number never reaches the lookup: FastAPI rejects
+    # the path itself, and the handler keeps the "path." prefix it only strips
+    # for bodies.
+    garbled = api_client.request("POST", "/policies/not-a-number/cancel")
+    assert garbled.status == 400
+    assert garbled.code == "VALIDATION_ERROR"
+    assert (garbled.detail or "").startswith("path.policy_id:"), garbled.detail
 
 
 def test_unknown_status_filter_is_rejected() -> None:
