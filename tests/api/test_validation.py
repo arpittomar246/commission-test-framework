@@ -187,8 +187,34 @@ def test_missing_month_parameter_is_rejected(
     assert both_wrong.code == "VALIDATION_ERROR"
 
 
-def test_missing_required_agent_fields_are_rejected() -> None:
+def test_missing_required_agent_fields_are_rejected(
+    api_client: ApiClient,
+    unique_email: Callable[[str], str],
+) -> None:
     """A partial agent payload returns 400."""
+    email = unique_email("partial")
+    complete = {"name": "Partial Agent", "email": email, "join_date": "2024-03-10"}
+
+    # Drop one field at a time, so each request is wrong in exactly one way.
+    for missing in complete:
+        payload = {k: v for k, v in complete.items() if k != missing}
+        response = api_client.create_agent_raw(payload)
+
+        assert response.status == 400, f"without {missing}: {response.status}"
+        assert response.code == "VALIDATION_ERROR"
+        # The handler strips "body" from the location, so the field is named
+        # plainly -- "name: Field required", not "body.name: ...".
+        assert (response.detail or "").startswith(f"{missing}:"), response.detail
+        assert set(response.body) == ERROR_KEYS
+
+    empty = api_client.create_agent_raw({})
+    assert empty.status == 400
+    assert empty.code == "VALIDATION_ERROR"
+
+    # None of the partial payloads created an agent. Matching on this test's
+    # own email keeps the check safe while other workers add agents.
+    emails = {a["email"] for a in api_client.list_agents().body}
+    assert email not in emails
 
 
 def test_missing_required_policy_fields_are_rejected() -> None:
