@@ -217,8 +217,36 @@ def test_missing_required_agent_fields_are_rejected(
     assert email not in emails
 
 
-def test_missing_required_policy_fields_are_rejected() -> None:
+def test_missing_required_policy_fields_are_rejected(
+    api_client: ApiClient,
+    new_agent: dict,
+) -> None:
     """A partial policy payload returns 400."""
+    complete = {
+        "agent_id": new_agent["id"],
+        "customer_name": "Partial Policy Ltd",
+        "value": 100_000,
+        "sold_date": SOLD_DATE,
+    }
+
+    for missing in complete:
+        payload = {k: v for k, v in complete.items() if k != missing}
+        response = api_client.create_policy_raw(payload)
+
+        assert response.status == 400, f"without {missing}: {response.status}"
+        assert response.code == "VALIDATION_ERROR"
+        assert (response.detail or "").startswith(f"{missing}:"), response.detail
+        assert set(response.body) == ERROR_KEYS
+
+    # Nothing was created for this agent by any of the partial payloads.
+    listed = api_client.list_policies(agent_id=new_agent["id"])
+    assert listed.status == 200
+    assert listed.body == []
+
+    # Control, last so it cannot disturb the check above: the complete payload
+    # is accepted, so each 400 really was down to the one missing field.
+    # (new_agent's teardown removes this policy along with the agent.)
+    assert api_client.create_policy_raw(complete).status == 201
 
 
 def test_invalid_email_is_rejected() -> None:
