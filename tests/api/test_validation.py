@@ -503,5 +503,50 @@ def test_malformed_date_is_rejected(
     assert leap.body["sold_date"] == "2024-02-29"
 
 
-def test_every_error_response_carries_a_code() -> None:
+def test_every_error_response_carries_a_code(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    unique_email: Callable[[str], str],
+) -> None:
     """No failure path returns a body without a machine-readable code."""
+    agent = agent_factory(email=unique_email("coded"))
+    cancelled = policy_factory(agent["id"], sold_date=SOLD_DATE, cancelled=True)
+    good_policy = {
+        "agent_id": agent["id"], "customer_name": "Coded Ltd",
+        "value": 100_000, "sold_date": SOLD_DATE,
+    }
+    good_agent = {"name": "Coded", "email": unique_email("fresh"), "join_date": "2024-03-10"}
+
+    # One way into every route-level failure, keyed by the code it must carry.
+    cases = {
+        "VALIDATION_ERROR": (400, lambda: api_client.create_agent_raw({})),
+        "INVALID_NAME": (400, lambda: api_client.create_agent_raw({**good_agent, "name": "   "})),
+        "INVALID_EMAIL": (400, lambda: api_client.create_agent_raw({**good_agent, "email": "nope"})),
+        "DUPLICATE_EMAIL": (409, lambda: api_client.create_agent_raw({**good_agent, "email": agent["email"]})),
+        "AGENT_NOT_FOUND": (404, lambda: api_client.get_agent(MISSING_ID)),
+        "INVALID_VALUE": (400, lambda: api_client.create_policy_raw({**good_policy, "value": 0})),
+        "INVALID_CUSTOMER": (400, lambda: api_client.create_policy_raw({**good_policy, "customer_name": "   "})),
+        "INVALID_STATUS": (400, lambda: api_client.list_policies(status="archived")),
+        "POLICY_NOT_FOUND": (404, lambda: api_client.cancel_policy(MISSING_ID)),
+        "ALREADY_CANCELLED": (409, lambda: api_client.cancel_policy(cancelled["id"])),
+        "INVALID_MONTH": (400, lambda: api_client.get_commission(agent["id"], "2026-13")),
+    }
+
+    for code, (status, call) in cases.items():
+        response = call()
+
+        assert response.status == status, f"{code}: got {response.status}"
+        assert isinstance(response.body, dict), f"{code}: body is not JSON"
+        assert set(response.body) == ERROR_KEYS, f"{code}: keys {sorted(response.body)}"
+        assert response.code == code
+        assert isinstance(response.detail, str) and response.detail.strip(), f"{code}: empty detail"
+
+    # The README lists eleven codes. Each one above is reached, so none of them
+    # is dead -- and a new code has to be added here, and to the README, to pass.
+    documented = {
+        "VALIDATION_ERROR", "INVALID_VALUE", "INVALID_NAME", "INVALID_EMAIL",
+        "INVALID_CUSTOMER", "INVALID_MONTH", "INVALID_STATUS", "AGENT_NOT_FOUND",
+        "POLICY_NOT_FOUND", "DUPLICATE_EMAIL", "ALREADY_CANCELLED",
+    }
+    assert set(cases) == documented
