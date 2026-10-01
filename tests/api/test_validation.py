@@ -531,6 +531,9 @@ def test_every_error_response_carries_a_code(
         "POLICY_NOT_FOUND": (404, lambda: api_client.cancel_policy(MISSING_ID)),
         "ALREADY_CANCELLED": (409, lambda: api_client.cancel_policy(cancelled["id"])),
         "INVALID_MONTH": (400, lambda: api_client.get_commission(agent["id"], "2026-13")),
+        # Requests that match no route at all, which FastAPI answers itself.
+        "ROUTE_NOT_FOUND": (404, lambda: api_client.request("GET", "/no-such-thing")),
+        "METHOD_NOT_ALLOWED": (405, lambda: api_client.request("DELETE", "/agents")),
     }
 
     for code, (status, call) in cases.items():
@@ -542,11 +545,21 @@ def test_every_error_response_carries_a_code(
         assert response.code == code
         assert isinstance(response.detail, str) and response.detail.strip(), f"{code}: empty detail"
 
-    # The README lists eleven codes. Each one above is reached, so none of them
-    # is dead -- and a new code has to be added here, and to the README, to pass.
+    # A 405 keeps its Allow header through the rewrite. Starlette only lists
+    # the first route it matched -- POST here, though GET works too -- so this
+    # checks that what it names is real, not that the list is complete.
+    wrong_method = api_client.request("DELETE", "/agents")
+    allowed = {m.strip() for m in wrong_method.headers.get("allow", "").split(",") if m.strip()}
+    assert allowed, "the Allow header was dropped"
+    assert allowed <= {"GET", "POST"}
+
+    # The README lists thirteen codes. Each one above is reached, so none of
+    # them is dead -- and a new code has to be added here, and to the README,
+    # to pass.
     documented = {
         "VALIDATION_ERROR", "INVALID_VALUE", "INVALID_NAME", "INVALID_EMAIL",
         "INVALID_CUSTOMER", "INVALID_MONTH", "INVALID_STATUS", "AGENT_NOT_FOUND",
         "POLICY_NOT_FOUND", "DUPLICATE_EMAIL", "ALREADY_CANCELLED",
+        "ROUTE_NOT_FOUND", "METHOD_NOT_ALLOWED",
     }
     assert set(cases) == documented
