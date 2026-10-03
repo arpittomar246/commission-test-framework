@@ -4,13 +4,38 @@ Guards the contract itself: field names, types, and the absence of anything
 unexpected, for both the success and the error shapes.
 """
 
+from typing import Callable
+
 import pytest
+
+from framework.schemas import SchemaValidationError, validate_schema
 
 pytestmark = [pytest.mark.api, pytest.mark.smoke]
 
 
-def test_created_agent_matches_the_agent_schema() -> None:
+def test_created_agent_matches_the_agent_schema(
+    agent_factory: Callable[..., dict],
+    unique_email: Callable[[str], str],
+) -> None:
     """Creating an agent returns a valid agent object."""
+    email = unique_email("schema")
+    agent = agent_factory(name="Schema Agent", email=email, join_date="2024-03-10")
+
+    validate_schema(agent, "agent")
+
+    assert agent["name"] == "Schema Agent"
+    assert agent["email"] == email
+    assert agent["join_date"] == "2024-03-10"
+
+    broken = [
+        {**agent, "leaked": "internal"},
+        {k: v for k, v in agent.items() if k != "guarantee_active"},
+        {**agent, "id": str(agent["id"])},
+        {**agent, "months_active": -1},
+    ]
+    for payload in broken:
+        with pytest.raises(SchemaValidationError):
+            validate_schema(payload, "agent")
 
 
 def test_agent_list_matches_the_agent_schema() -> None:
