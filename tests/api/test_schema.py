@@ -8,6 +8,7 @@ from typing import Callable
 
 import pytest
 
+from framework.api_client import ApiClient
 from framework.schemas import SchemaValidationError, validate_schema
 
 pytestmark = [pytest.mark.api, pytest.mark.smoke]
@@ -38,8 +39,26 @@ def test_created_agent_matches_the_agent_schema(
             validate_schema(payload, "agent")
 
 
-def test_agent_list_matches_the_agent_schema() -> None:
+def test_agent_list_matches_the_agent_schema(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+) -> None:
     """Every item in the agent listing validates."""
+    mine = agent_factory(name="Listed Agent", join_date="2024-03-10")
+
+    response = api_client.list_agents()
+
+    assert response.status == 200
+    validate_schema(response.body, "agent", many=True)
+
+    listed = {agent["id"]: agent for agent in response.body}
+    assert mine["id"] in listed
+    assert listed[mine["id"]] == mine
+
+    with pytest.raises(SchemaValidationError, match=r"\[1\]id"):
+        validate_schema([mine, {**mine, "id": "not-an-int"}], "agent", many=True)
+    with pytest.raises(SchemaValidationError, match="expected a list"):
+        validate_schema(mine, "agent", many=True)
 
 
 def test_single_agent_matches_the_agent_schema() -> None:
