@@ -154,8 +154,24 @@ def test_policy_list_matches_the_policy_schema(
     assert filtered[3].body == []
 
 
-def test_cancelled_policy_matches_the_policy_schema() -> None:
+def test_cancelled_policy_matches_the_policy_schema(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """The cancel response is still a valid policy object."""
+    agent = agent_factory(name="Cancelling Owner", join_date="2024-03-10")
+    before = policy_factory(agent["id"], value=180_000, sold_date="2024-05-14")
+    assert before["status"] == "active"
+
+    response = api_client.cancel_policy(before["id"])
+
+    assert response.status == 200
+    validate_schema(response.body, "policy")
+    assert response.body == {**before, "status": "cancelled"}
+
+    stored = api_client.list_policies(agent_id=agent["id"]).body
+    assert stored == [response.body]
 
 
 def test_commission_response_matches_the_commission_schema() -> None:
