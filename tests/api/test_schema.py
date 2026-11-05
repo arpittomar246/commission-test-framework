@@ -4,6 +4,7 @@ Guards the contract itself: field names, types, and the absence of anything
 unexpected, for both the success and the error shapes.
 """
 
+from datetime import date
 from typing import Callable
 
 import pytest
@@ -61,8 +62,30 @@ def test_agent_list_matches_the_agent_schema(
         validate_schema(mine, "agent", many=True)
 
 
-def test_single_agent_matches_the_agent_schema() -> None:
+def test_single_agent_matches_the_agent_schema(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+) -> None:
     """Fetching one agent returns a valid agent object."""
+    joined_today = agent_factory(name="Fresh Agent", join_date=date.today().isoformat())
+    settled = agent_factory(name="Settled Agent", join_date="2023-01-10")
+
+    fetched = {}
+    for created in (joined_today, settled):
+        response = api_client.get_agent(created["id"])
+
+        assert response.status == 200
+        validate_schema(response.body, "agent")
+        assert response.body == created
+        fetched[created["id"]] = response.body
+
+    fresh = fetched[joined_today["id"]]
+    assert fresh["months_active"] == 0
+    assert fresh["guarantee_active"] is True
+
+    old = fetched[settled["id"]]
+    assert old["months_active"] > 0
+    assert old["guarantee_active"] is False
 
 
 def test_created_policy_matches_the_policy_schema() -> None:
