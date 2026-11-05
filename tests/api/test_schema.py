@@ -88,8 +88,34 @@ def test_single_agent_matches_the_agent_schema(
     assert old["guarantee_active"] is False
 
 
-def test_created_policy_matches_the_policy_schema() -> None:
+def test_created_policy_matches_the_policy_schema(
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Creating a policy returns a valid policy object."""
+    agent = agent_factory(name="Policy Owner", join_date="2024-03-10")
+    policy = policy_factory(
+        agent["id"], value=125_000.5, sold_date="2024-05-12", customer_name="  Acme Foods  "
+    )
+
+    validate_schema(policy, "policy")
+
+    assert policy["agent_id"] == agent["id"]
+    assert policy["agent_name"] == agent["name"]
+    assert policy["customer_name"] == "Acme Foods"
+    assert policy["value"] == pytest.approx(125_000.5)
+    assert policy["sold_date"] == "2024-05-12"
+    assert policy["status"] == "active"
+
+    broken = [
+        {**policy, "status": "pending"},
+        {**policy, "value": 0},
+        {k: v for k, v in policy.items() if k != "agent_name"},
+        {**policy, "cancelled_at": "2024-06-01T00:00:00Z"},
+    ]
+    for payload in broken:
+        with pytest.raises(SchemaValidationError):
+            validate_schema(payload, "policy")
 
 
 def test_policy_list_matches_the_policy_schema() -> None:
