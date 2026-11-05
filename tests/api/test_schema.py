@@ -118,8 +118,40 @@ def test_created_policy_matches_the_policy_schema(
             validate_schema(payload, "policy")
 
 
-def test_policy_list_matches_the_policy_schema() -> None:
+def test_policy_list_matches_the_policy_schema(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """Every item in the policy listing validates."""
+    agent = agent_factory(name="Listing Owner", join_date="2024-03-10")
+    active = policy_factory(agent["id"], value=200_000, sold_date="2024-05-06")
+    cancelled = policy_factory(agent["id"], value=150_000, sold_date="2024-05-20", cancelled=True)
+
+    everything = api_client.list_policies()
+    assert everything.status == 200
+    validate_schema(everything.body, "policy", many=True)
+
+    listed = {policy["id"]: policy for policy in everything.body}
+    assert listed[active["id"]] == active
+    assert listed[cancelled["id"]] == cancelled
+    assert {listed[active["id"]]["status"], listed[cancelled["id"]]["status"]} == {
+        "active",
+        "cancelled",
+    }
+
+    filtered = [
+        api_client.list_policies(agent_id=agent["id"]),
+        api_client.list_policies(agent_id=agent["id"], status="active"),
+        api_client.list_policies(agent_id=agent["id"], status="cancelled"),
+        api_client.list_policies(agent_id=999_999_999),
+    ]
+    for response in filtered:
+        assert response.status == 200
+        validate_schema(response.body, "policy", many=True)
+
+    assert [p["id"] for p in filtered[0].body] == [cancelled["id"], active["id"]]
+    assert filtered[3].body == []
 
 
 def test_cancelled_policy_matches_the_policy_schema() -> None:
