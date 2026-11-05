@@ -33,8 +33,6 @@ def test_a_failed_post_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
     fake, calls = _always(500)
     monkeypatch.setattr(client.session, "request", fake)
 
-    # A server can save a row and then fail while answering. Sending the POST
-    # again would save it again, so the failure has to come straight back.
     response = client.create_policy(
         agent_id=1, customer_name="Once Only", value=100_000, sold_date="2024-05-12"
     )
@@ -43,7 +41,6 @@ def test_a_failed_post_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
     assert response.attempts == 1
     assert calls == ["POST"]
 
-    # Control: reads are still retried, since asking twice changes nothing.
     calls.clear()
     read = client.get_agent(1)
 

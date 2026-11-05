@@ -72,8 +72,6 @@ class ApiClient:
         )
         self.history: list[ApiResponse] = []
 
-    # ------------------------------------------------------------- plumbing --
-
     def request(
         self,
         method: str,
@@ -121,8 +119,6 @@ class ApiClient:
         """Close the underlying session."""
         self.session.close()
 
-    # --------------------------------------------------------------- agents --
-
     def create_agent(self, name: str, email: str, join_date: str) -> ApiResponse:
         """POST /api/agents"""
         return self.request(
@@ -140,8 +136,6 @@ class ApiClient:
     def get_agent(self, agent_id: int) -> ApiResponse:
         """GET /api/agents/{id}"""
         return self.request("GET", f"/agents/{agent_id}")
-
-    # -------------------------------------------------------------- policies --
 
     def create_policy(
         self, agent_id: int, customer_name: str, value: float, sold_date: str
@@ -176,8 +170,6 @@ class ApiClient:
     def cancel_policy(self, policy_id: int) -> ApiResponse:
         """POST /api/policies/{id}/cancel"""
         return self.request("POST", f"/policies/{policy_id}/cancel")
-
-    # ------------------------------------------------------------ commission --
 
     def get_commission(self, agent_id: int, month: str) -> ApiResponse:
         """GET /api/agents/{id}/commission?month=YYYY-MM"""

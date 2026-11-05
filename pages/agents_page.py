@@ -35,8 +35,6 @@ class AgentsPage(BasePage):
         "months_active": "agents-sort-months-active",
     }
 
-    # ----------------------------------------------------------------- table --
-
     def row(self, agent_id: int) -> Locator:
         """Locator for one agent's row."""
         return self.testid(f"agent-row-{agent_id}")
@@ -91,8 +89,6 @@ class AgentsPage(BasePage):
             ids.append(int(testid.rsplit("-", 1)[-1]))
         return ids
 
-    # -------------------------------------------------------------- controls --
-
     def search(self, term: str) -> None:
         """Type into the live search box."""
         self.type_testid(self.SEARCH_INPUT, term)
@@ -109,8 +105,6 @@ class AgentsPage(BasePage):
         """Follow an agent's 'View commission' link."""
         self.click_testid(f"agent-commission-link-{agent_id}")
         self.page.wait_for_load_state("networkidle")
-
-    # ----------------------------------------------------------------- modal --
 
     def open_add_modal(self) -> None:
         """Open the create-agent modal and wait for it."""

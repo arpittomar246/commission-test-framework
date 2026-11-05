@@ -47,11 +47,6 @@ app = FastAPI(title="Commission Portal", version="1.0.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
-# --------------------------------------------------------------------------- #
-# errors
-# --------------------------------------------------------------------------- #
-
-
 def error(status: int, code: str, detail: str) -> JSONResponse:
     """Build the single error response shape used across the API."""
     return JSONResponse(status_code=status, content={"detail": detail, "code": code})
@@ -98,15 +93,9 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException):
         HTTP_ERROR_CODES.get(exc.status_code, "HTTP_ERROR"),
         str(exc.detail),
     )
-    # Keep headers such as Allow, which tells the client what a 405 would accept.
     if exc.headers:
         response.headers.update(exc.headers)
     return response
-
-
-# --------------------------------------------------------------------------- #
-# helpers
-# --------------------------------------------------------------------------- #
 
 
 def _today() -> date:
@@ -161,17 +150,10 @@ def _records(agent: Agent) -> list[rules.PolicyRecord]:
     ]
 
 
-# --------------------------------------------------------------------------- #
-# agents
-# --------------------------------------------------------------------------- #
-
-
 @app.post("/api/agents", response_model=AgentOut, status_code=201)
 def create_agent(payload: AgentCreate, db: Session = Depends(get_db)) -> AgentOut:
     """Create an agent."""
     name = payload.name.strip()
-    # Lowercased so one inbox is one agent whatever casing is typed. The lookup
-    # lowers the stored side too, for rows saved before this rule existed.
     email = payload.email.strip().lower()
     if not name:
         raise ApiError(400, "INVALID_NAME", "name must not be empty")
@@ -201,16 +183,9 @@ def get_agent(agent_id: int, db: Session = Depends(get_db)) -> AgentOut:
     return _agent_out(_get_agent(db, agent_id))
 
 
-# --------------------------------------------------------------------------- #
-# policies
-# --------------------------------------------------------------------------- #
-
-
 @app.post("/api/policies", response_model=PolicyOut, status_code=201)
 def create_policy(payload: PolicyCreate, db: Session = Depends(get_db)) -> PolicyOut:
     """Create a policy for an existing agent."""
-    # Before the sign check, which NaN and infinity both slip past. Left in,
-    # infinity was saved and then broke every commission call for the agent.
     if not math.isfinite(payload.value):
         raise ApiError(400, "INVALID_VALUE", "value must be a finite number")
     if payload.value <= 0:
@@ -264,11 +239,6 @@ def cancel_policy(policy_id: int, db: Session = Depends(get_db)) -> PolicyOut:
     db.commit()
     db.refresh(policy)
     return _policy_out(policy)
-
-
-# --------------------------------------------------------------------------- #
-# commission
-# --------------------------------------------------------------------------- #
 
 
 @app.get("/api/agents/{agent_id}/commission", response_model=CommissionOut)
@@ -327,11 +297,6 @@ def dashboard_stats(db: Session = Depends(get_db)) -> dict:
         "cancelled_this_month": cancelled_this_month,
         "total_payout": round(payout, 2),
     }
-
-
-# --------------------------------------------------------------------------- #
-# pages
-# --------------------------------------------------------------------------- #
 
 
 def _page(request: Request, template: str, title: str, active: str) -> HTMLResponse:

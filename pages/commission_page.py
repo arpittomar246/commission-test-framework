@@ -37,8 +37,6 @@ class CommissionPage(BasePage):
     POLICIES_TABLE = "commission-policies-table"
     EMPTY_STATE = "commission-empty-state"
 
-    # -------------------------------------------------------------- controls --
-
     def select_agent(self, agent_id: int | str) -> None:
         """Pick the agent to calculate for."""
         self.select_testid(self.AGENT_SELECT, str(agent_id))
@@ -69,8 +67,6 @@ class CommissionPage(BasePage):
     def error_visible(self) -> bool:
         """Whether the controls' error banner is showing."""
         return self.testid(self.ERROR).is_visible()
-
-    # ------------------------------------------------------------- breakdown --
 
     def result_visible(self) -> bool:
         """Whether the breakdown card is on screen."""
@@ -113,8 +109,6 @@ class CommissionPage(BasePage):
         raw = self.get_text(testid)
         return float(raw.replace(",", "").replace("-", "", 1) or 0)
 
-    # -------------------------------------------------------------- guarantee --
-
     def guarantee_banner(self) -> Locator:
         """Locator for the minimum-guarantee banner."""
         return self.testid(self.GUARANTEE_BANNER)
@@ -131,8 +125,6 @@ class CommissionPage(BasePage):
         """The amount the banner says the payout was raised to."""
         return self.get_text(self.GUARANTEE_BANNER_AMOUNT)
 
-    # ------------------------------------------------------------------ chart --
-
     def chart(self) -> Locator:
         """Locator for the chart canvas."""
         return self.testid(self.CHART)
@@ -144,8 +136,6 @@ class CommissionPage(BasePage):
     def chart_payouts(self) -> list[float]:
         """The six payout values the chart was drawn with."""
         return json.loads(self.get_attribute(self.CHART, "data-payouts") or "[]")
-
-    # ----------------------------------------------------------------- table --
 
     def policy_rows(self) -> Locator:
         """Locator matching every row of the included-policies table."""

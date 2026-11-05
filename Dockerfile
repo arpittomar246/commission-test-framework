@@ -1,5 +1,3 @@
-# The app image. Tests run against it from the host or from the CI job --
-# the container itself carries no browsers, so it stays small.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

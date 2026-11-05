@@ -25,8 +25,6 @@ class BasePage:
         self.config = cfg or default_config
         self.timeout = self.config.timeout * 1000
 
-    # ------------------------------------------------------------ navigation --
-
     def goto(self, path: str | None = None) -> Self:
         """Open this page (or an explicit path) and wait for the network to settle."""
         target = path if path is not None else self.path
@@ -37,8 +35,6 @@ class BasePage:
         """Reload the current page."""
         self.page.reload(wait_until="networkidle")
         return self
-
-    # -------------------------------------------------------------- locators --
 
     def testid(self, testid: str) -> Locator:
         """Locator for a single ``data-testid``."""
@@ -58,8 +54,6 @@ class BasePage:
         """Count elements whose testid starts with ``testid_prefix``."""
         return self.page.locator(f'[data-testid^="{testid_prefix}"]').count()
 
-    # --------------------------------------------------------------- actions --
-
     def click_testid(self, testid: str) -> None:
         """Click an element once it is ready."""
         self.wait_for_testid(testid).click()
@@ -78,8 +72,6 @@ class BasePage:
         field.click()
         field.press_sequentially(value, delay=delay)
 
-    # ----------------------------------------------------------------- reads --
-
     def get_text(self, testid: str) -> str:
         """Trimmed visible text of an element."""
         return (self.wait_for_testid(testid).inner_text() or "").strip()
@@ -92,8 +84,6 @@ class BasePage:
         """Read one attribute off an element."""
         return self.wait_for_testid(testid).get_attribute(name)
 
-    # ---------------------------------------------------------------- toasts --
-
     def wait_for_toast(self, kind: str = "success") -> str:
         """Wait for a toast of the given kind and return its message."""
         return self.wait_for_testid(f"toast-{kind}").inner_text().strip()
@@ -101,8 +91,6 @@ class BasePage:
     def toast_count(self, kind: str = "success") -> int:
         """How many toasts of a kind are on screen right now."""
         return self.testid(f"toast-{kind}").count()
-
-    # ---------------------------------------------------------------- modals --
 
     def modal_is_open(self, testid: str) -> bool:
         """Whether a modal is currently open."""
@@ -115,8 +103,6 @@ class BasePage:
     def wait_for_modal_closed(self, testid: str) -> None:
         """Wait for a modal to disappear."""
         self.testid(testid).wait_for(state="hidden", timeout=self.timeout)
-
-    # ------------------------------------------------------------------- nav --
 
     def nav_to(self, section: str) -> None:
         """Click a sidebar link: dashboard, agents, policies or commission."""

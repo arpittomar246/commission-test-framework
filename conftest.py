@@ -21,11 +21,6 @@ from pages.commission_page import CommissionPage
 from pages.policies_page import PoliciesPage
 
 
-# --------------------------------------------------------------------------- #
-# database helpers
-# --------------------------------------------------------------------------- #
-
-
 def _connect() -> sqlite3.Connection:
     """Open the app's SQLite file directly, for setup and teardown only."""
     return sqlite3.connect(str(config.db_path))
@@ -48,11 +43,6 @@ def _delete_policies(policy_ids: list[int]) -> None:
     placeholders = ",".join("?" * len(policy_ids))
     with _connect() as conn:
         conn.execute(f"DELETE FROM policies WHERE id IN ({placeholders})", policy_ids)
-
-
-# --------------------------------------------------------------------------- #
-# api
-# --------------------------------------------------------------------------- #
 
 
 @pytest.fixture(scope="session")
@@ -85,11 +75,6 @@ def reset_db() -> Iterator[None]:
     wipe()
     yield
     wipe()
-
-
-# --------------------------------------------------------------------------- #
-# data factories
-# --------------------------------------------------------------------------- #
 
 
 @pytest.fixture
@@ -164,11 +149,6 @@ def policy_factory(api_client: ApiClient) -> Iterator[Callable[..., dict]]:
 
     yield make
     _delete_policies(created)
-
-
-# --------------------------------------------------------------------------- #
-# playwright
-# --------------------------------------------------------------------------- #
 
 
 @pytest.fixture(scope="session")

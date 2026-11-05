@@ -16,7 +16,6 @@ from datetime import date, datetime, timedelta, timezone
 from app.database import SessionLocal, init_db
 from app.models import STATUS_ACTIVE, STATUS_CANCELLED, Agent, Policy
 
-# (name, email, months before today the agent joined)
 AGENTS: list[tuple[str, str, int]] = [
     ("Priya Sharma", "priya.sharma@example.com", 0),
     ("Rahul Menon", "rahul.menon@example.com", 1),
@@ -25,7 +24,6 @@ AGENTS: list[tuple[str, str, int]] = [
     ("Neha Kulkarni", "neha.kulkarni@example.com", 14),
 ]
 
-# (agent index, customer, value, months before today it was sold, cancelled)
 POLICIES: list[tuple[int, str, float, int, bool]] = [
     (0, "Sunrise Logistics", 90_000, 0, False),
     (0, "Kestrel Foods", 150_000, 0, True),

@@ -34,9 +34,6 @@ def test_policies_table_lists_every_policy(
     policies_page: PoliciesPage,
 ) -> None:
     """Each policy from the API gets a row."""
-    # Scoped to an agent this test owns. Comparing the table against every
-    # policy in the database races other workers under ``-n auto``, which are
-    # free to create and delete rows between the page load and the API call.
     agent = agent_factory(name="Table Listing Agent")
     for day in (4, 11, 18):
         policy_factory(agent["id"], sold_date=f"{SOLD_DATE[:8]}{day:02d}")
@@ -249,7 +246,6 @@ def test_cancel_failure_shows_an_error_toast(
     policy = policy_factory(agent["id"], sold_date=SOLD_DATE)
     policies_page.reload()
 
-    # Cancel behind the page's back, so its button is stale and the retry 409s.
     assert api_client.cancel_policy(policy["id"]).status == 200
 
     policies_page.cancel_policy(policy["id"])
@@ -272,9 +268,6 @@ def test_add_policy_modal_lists_every_agent_in_its_dropdown(
     options = policies_page.agent_select_options()
     assert options[0] == "Select an agent"
     assert "Dropdown Agent" in options
-    # No count against the live agent list: other workers add and remove agents
-    # between this page load and any later call. Uniqueness is the invariant
-    # that actually matters -- fillAgentOptions() must not double-append.
     assert len(options) == len(set(options))
 
 
@@ -285,9 +278,6 @@ def test_creating_a_policy_adds_a_row_and_shows_a_success_toast(
     """A valid submission closes the modal, refreshes the table and toasts."""
     agent = agent_factory(name="Creator Agent")
     policies_page.reload()
-    # Filter to this test's own agent first, so the row count it watches cannot
-    # be moved by policies other workers create. The filter survives the
-    # re-render that follows a successful create.
     policies_page.filter_by_agent(agent["id"])
     expect(policies_page.rows()).to_have_count(0)
 

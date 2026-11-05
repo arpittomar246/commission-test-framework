@@ -6,7 +6,6 @@ __pycache__/
 allure-results/
 test-results/
 .env
-# framework
 .venv/
 node_modules/
 junit-*.xml

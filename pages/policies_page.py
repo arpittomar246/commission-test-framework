@@ -35,8 +35,6 @@ class PoliciesPage(BasePage):
     DISMISS_CANCEL_BUTTON = "dismiss-cancel-button"
     CANCEL_MODAL_LABEL = "cancel-modal-policy-label"
 
-    # ----------------------------------------------------------------- table --
-
     def row(self, policy_id: int) -> Locator:
         """Locator for one policy's row."""
         return self.testid(f"policy-row-{policy_id}")
@@ -91,8 +89,6 @@ class PoliciesPage(BasePage):
         badges = self.testid(self.TABLE_BODY).locator('[data-testid^="policy-status-"]')
         return [badges.nth(i).get_attribute("data-status") for i in range(badges.count())]
 
-    # --------------------------------------------------------------- filters --
-
     def filter_by_agent(self, agent_id: int | str) -> None:
         """Narrow the table to one agent; pass ``""`` for all agents."""
         self.select_testid(self.FILTER_AGENT, str(agent_id))
@@ -104,8 +100,6 @@ class PoliciesPage(BasePage):
     def agent_filter_options(self) -> list[str]:
         """Labels of the agent filter's options."""
         return self.testid(self.FILTER_AGENT).locator("option").all_inner_texts()
-
-    # ---------------------------------------------------------- create modal --
 
     def open_add_modal(self) -> None:
         """Open the create-policy modal and wait for it."""
@@ -152,8 +146,6 @@ class PoliciesPage(BasePage):
     def form_error(self) -> str:
         """Text of the create modal's form-level error banner."""
         return self.get_text(self.FORM_ERROR)
-
-    # ---------------------------------------------------------- cancel modal --
 
     def cancel_button(self, policy_id: int) -> Locator:
         """Locator for one row's 'Cancel policy' button."""

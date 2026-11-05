@@ -61,8 +61,6 @@ class CommissionBreakdown:
 
 def parse_month(month: str) -> tuple[int, int]:
     """Split a ``YYYY-MM`` string into a (year, month) pair."""
-    # fullmatch, not match: a bare `$` also matches just before a trailing
-    # newline, which let "2024-05\n" through and then matched no policies.
     if not isinstance(month, str) or not _MONTH_PATTERN.fullmatch(month):
         raise InvalidMonthError(f"month must look like YYYY-MM, got {month!r}")
     year, mon = month.split("-")
