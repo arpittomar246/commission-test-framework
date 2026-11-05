@@ -174,8 +174,53 @@ def test_cancelled_policy_matches_the_policy_schema(
     assert stored == [response.body]
 
 
-def test_commission_response_matches_the_commission_schema() -> None:
+def test_commission_response_matches_the_commission_schema(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+) -> None:
     """The commission breakdown validates."""
+    settled = agent_factory(name="Settled Earner", join_date="2023-01-10")
+    policy_factory(settled["id"], value=400_000, sold_date="2024-05-06")
+    policy_factory(settled["id"], value=150_000, sold_date="2024-05-14", cancelled=True)
+    policy_factory(settled["id"], value=300_000, sold_date="2024-06-09", cancelled=True)
+
+    newcomer = agent_factory(name="New Joiner", join_date="2024-03-10")
+
+    scenarios = {
+        "earned with a clawback": (settled, "2024-05"),
+        "fully clawed back": (settled, "2024-06"),
+        "nothing sold, window shut": (settled, "2024-07"),
+        "nothing sold, guarantee pays": (newcomer, "2024-03"),
+    }
+    seen = {}
+    for label, (agent, month) in scenarios.items():
+        response = api_client.get_commission(agent["id"], month)
+
+        assert response.status == 200, label
+        validate_schema(response.body, "commission")
+        assert response.body["agent_id"] == agent["id"], label
+        assert response.body["month"] == month, label
+        seen[label] = response.body
+
+    assert seen["earned with a clawback"]["clawback"] > 0
+    assert seen["fully clawed back"]["final_payout"] == 0
+    assert seen["nothing sold, window shut"]["policy_count"] == 0
+    assert seen["nothing sold, window shut"]["gross_commission"] == 0
+    assert seen["nothing sold, guarantee pays"]["guarantee_applied"] is True
+    assert {body["guarantee_applied"] for body in seen.values()} == {True, False}
+
+    valid = seen["earned with a clawback"]
+    broken = [
+        {**valid, "final_payout": -1.0},
+        {**valid, "clawback": -500.0},
+        {**valid, "month": "2024-5"},
+        {**valid, "policy_count": 1.5},
+        {**valid, "currency": "INR"},
+    ]
+    for payload in broken:
+        with pytest.raises(SchemaValidationError):
+            validate_schema(payload, "commission")
 
 
 def test_not_found_error_matches_the_error_schema() -> None:
