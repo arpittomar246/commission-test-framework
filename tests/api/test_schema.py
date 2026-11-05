@@ -223,8 +223,38 @@ def test_commission_response_matches_the_commission_schema(
             validate_schema(payload, "commission")
 
 
-def test_not_found_error_matches_the_error_schema() -> None:
+def test_not_found_error_matches_the_error_schema(api_client: ApiClient) -> None:
     """A 404 body carries a detail and a code."""
+    missing = 999_999_999
+    not_found = {
+        "fetch an agent": api_client.get_agent(missing),
+        "an agent's commission": api_client.get_commission(missing, "2024-05"),
+        "an agent's history": api_client.get_commission_history(missing, "2024-05"),
+        "a policy for an agent": api_client.create_policy(
+            agent_id=missing, customer_name="Nobody Ltd", value=1_000, sold_date="2024-05-12"
+        ),
+        "cancel a policy": api_client.cancel_policy(missing),
+        "a route": api_client.request("GET", "/no-such-thing"),
+    }
+    codes = set()
+    for label, response in not_found.items():
+        assert response.status == 404, label
+        validate_schema(response.body, "error")
+        codes.add(response.code)
+
+    assert codes == {"AGENT_NOT_FOUND", "POLICY_NOT_FOUND", "ROUTE_NOT_FOUND"}
+
+    broken = [
+        {"detail": "Not Found"},
+        {"detail": [{"loc": ["path", "agent_id"], "msg": "not found"}], "code": "AGENT_NOT_FOUND"},
+        {"detail": "", "code": "AGENT_NOT_FOUND"},
+        {"detail": "No agent with id 1", "code": "agent_not_found"},
+        {"detail": "No agent with id 1", "code": "AGENT-NOT-FOUND"},
+        {"detail": "No agent with id 1", "code": "AGENT_NOT_FOUND", "status": 404},
+    ]
+    for payload in broken:
+        with pytest.raises(SchemaValidationError):
+            validate_schema(payload, "error")
 
 
 def test_validation_error_matches_the_error_schema() -> None:
