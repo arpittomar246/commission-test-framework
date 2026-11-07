@@ -5,6 +5,7 @@ from typing import Callable
 
 import pytest
 
+from framework.api_client import ApiClient
 from pages.agents_page import AgentsPage
 
 pytestmark = [pytest.mark.ui, pytest.mark.smoke]
@@ -33,8 +34,30 @@ def test_agents_table_lists_every_agent(
     assert not agents_page.is_visible(AgentsPage.NO_RESULTS)
 
 
-def test_agent_row_shows_name_email_join_date_and_months_active() -> None:
+def test_agent_row_shows_name_email_join_date_and_months_active(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    unique_email: Callable[[str], str],
+    agents_page: AgentsPage,
+) -> None:
     """Every column of a row is populated."""
+    name = "<b>Ana</b> O'Brien & Sons"
+    agent = agent_factory(name=name, email=unique_email("row"), join_date="2024-03-10")
+    agents_page.reload()
+
+    shown = api_client.get_agent(agent["id"]).body
+    aid = agent["id"]
+
+    assert agents_page.name_of(aid) == name
+    assert agents_page.email_of(aid) == shown["email"]
+    assert agents_page.join_date_of(aid) == "2024-03-10"
+    assert agents_page.months_active_of(aid) == str(shown["months_active"])
+
+    name_cell = agents_page.testid(f"agent-cell-name-{aid}")
+    assert name_cell.locator("b").count() == 0
+
+    link = agents_page.testid(f"agent-commission-link-{aid}")
+    assert link.get_attribute("href") == f"/commission?agent_id={aid}"
 
 
 def test_guarantee_badge_reads_active_for_a_new_agent() -> None:
