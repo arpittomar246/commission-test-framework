@@ -175,8 +175,30 @@ def test_search_matches_on_email_as_well_as_name(
         assert set(agents_page.row_ids()) == expected, term
 
 
-def test_search_with_no_matches_shows_the_no_results_state() -> None:
+def test_search_with_no_matches_shows_the_no_results_state(
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """A term matching nothing shows the empty-search message."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    findable = agent_factory(name=f"{token} Findable")
+    agents_page.reload()
+
+    agents_page.search(f"nobody-{uuid.uuid4().hex}")
+
+    expect(agents_page.rows()).to_have_count(0)
+    expect(agents_page.testid(AgentsPage.NO_RESULTS)).to_be_visible()
+    assert "match your search" in agents_page.get_text(AgentsPage.NO_RESULTS)
+    assert not agents_page.is_visible(AgentsPage.EMPTY_STATE)
+    assert not agents_page.is_visible("agents-empty-cta")
+    assert agents_page.is_visible(AgentsPage.TABLE)
+
+    agents_page.clear_search()
+    agents_page.search(token)
+
+    expect(agents_page.rows()).to_have_count(1)
+    assert agents_page.row_ids() == [findable["id"]]
+    expect(agents_page.testid(AgentsPage.NO_RESULTS)).to_be_hidden()
 
 
 def test_clearing_the_search_restores_every_row() -> None:
