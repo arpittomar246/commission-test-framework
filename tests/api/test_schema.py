@@ -9,7 +9,7 @@ from typing import Callable
 
 import pytest
 
-from framework.api_client import ApiClient
+from framework.api_client import ApiClient, ApiResponse
 from framework.schemas import SchemaValidationError, validate_schema
 
 pytestmark = [pytest.mark.api, pytest.mark.smoke]
@@ -257,8 +257,54 @@ def test_not_found_error_matches_the_error_schema(api_client: ApiClient) -> None
             validate_schema(payload, "error")
 
 
-def test_validation_error_matches_the_error_schema() -> None:
+def test_validation_error_matches_the_error_schema(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    unique_email: Callable[[str], str],
+) -> None:
     """A 400 body carries a detail and a code."""
+    agent = agent_factory(join_date="2024-03-10")
+    good_agent = {"name": "Schema 400", "email": unique_email("s400"), "join_date": "2024-03-10"}
+    good_policy = {
+        "agent_id": agent["id"], "customer_name": "Bad Input Ltd",
+        "value": 100_000, "sold_date": "2024-05-12",
+    }
+    agents_url = f"{api_client.base_url}/agents"
+    not_json = api_client.session.post(
+        agents_url, data="{broken", headers={"Content-Type": "application/json"}
+    )
+
+    from_pydantic = {
+        "a missing body field": api_client.create_agent_raw({}),
+        "a wrongly typed body field": api_client.create_policy_raw({**good_policy, "value": "lots"}),
+        "a body that is not an object": api_client.request("POST", "/agents", json="just a string"),
+        "a body that is not JSON": ApiResponse(
+            status=not_json.status_code, body=not_json.json(), elapsed_ms=0.0
+        ),
+        "a missing query parameter": api_client.request("GET", f"/agents/{agent['id']}/commission"),
+        "a path id that is not a number": api_client.request("POST", "/policies/abc/cancel"),
+    }
+    from_the_app = {
+        "a zero value": api_client.create_policy_raw({**good_policy, "value": 0}),
+        "an infinite value": api_client.create_policy_raw({**good_policy, "value": "Infinity"}),
+        "a blank name": api_client.create_agent_raw({**good_agent, "name": "   "}),
+        "a malformed email": api_client.create_agent_raw({**good_agent, "email": "nope"}),
+        "a blank customer": api_client.create_policy_raw({**good_policy, "customer_name": "  "}),
+        "a malformed month": api_client.get_commission(agent["id"], "2024-13"),
+        "an unknown status": api_client.list_policies(status="archived"),
+    }
+
+    codes = {}
+    for label, response in {**from_pydantic, **from_the_app}.items():
+        assert response.status == 400, f"{label}: got {response.status}"
+        validate_schema(response.body, "error")
+        codes.setdefault(response.code, []).append(label)
+
+    assert set(codes) == {
+        "VALIDATION_ERROR", "INVALID_VALUE", "INVALID_NAME", "INVALID_EMAIL",
+        "INVALID_CUSTOMER", "INVALID_MONTH", "INVALID_STATUS",
+    }
+    assert sorted(codes["VALIDATION_ERROR"]) == sorted(from_pydantic)
 
 
 def test_conflict_error_matches_the_error_schema() -> None:
