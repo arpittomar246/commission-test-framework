@@ -342,8 +342,75 @@ def test_conflict_error_matches_the_error_schema(
         assert named in response.detail, f"{label}: {response.detail!r}"
 
 
-def test_responses_carry_no_unexpected_fields() -> None:
+def test_responses_carry_no_unexpected_fields(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    unique_email: Callable[[str], str],
+) -> None:
     """No endpoint leaks fields the schemas do not declare."""
+    agent = agent_factory(join_date="2024-03-10")
+    policy = policy_factory(agent["id"], sold_date="2024-05-12")
+    aid = agent["id"]
+
+    with_schema = {
+        ("POST", "/api/agents"): (
+            "agent", False,
+            lambda: ApiResponse(
+                status=201,
+                body=agent_factory(name="Sweep", email=unique_email("sweep")),
+                elapsed_ms=0.0,
+            ),
+        ),
+        ("GET", "/api/agents"): ("agent", True, api_client.list_agents),
+        ("GET", "/api/agents/{agent_id}"): ("agent", False, lambda: api_client.get_agent(aid)),
+        ("POST", "/api/policies"): (
+            "policy", False,
+            lambda: api_client.create_policy(
+                agent_id=aid, customer_name="Sweep Ltd", value=1_000, sold_date="2024-05-12"
+            ),
+        ),
+        ("GET", "/api/policies"): ("policy", True, api_client.list_policies),
+        ("POST", "/api/policies/{policy_id}/cancel"): (
+            "policy", False, lambda: api_client.cancel_policy(policy["id"]),
+        ),
+        ("GET", "/api/agents/{agent_id}/commission"): (
+            "commission", False, lambda: api_client.get_commission(aid, "2024-05"),
+        ),
+    }
+    without_schema = {
+        ("GET", "/api/agents/{agent_id}/commission/history"): (
+            {"agent_id", "months", "payouts"},
+            lambda: api_client.get_commission_history(aid, "2024-05"),
+        ),
+        ("GET", "/api/stats"): (
+            {"month", "total_agents", "active_policies", "cancelled_this_month", "total_payout"},
+            api_client.get_stats,
+        ),
+    }
+
+    for route, (schema, many, call) in with_schema.items():
+        response = call()
+        assert response.ok, f"{route}: {response.status}"
+        validate_schema(response.body, schema, many=many)
+
+    for route, (fields, call) in without_schema.items():
+        response = call()
+        assert response.ok, f"{route}: {response.status}"
+        assert set(response.body) == fields, f"{route}: {sorted(response.body)}"
+
+    wrong_method = api_client.request("DELETE", "/agents")
+    assert wrong_method.status == 405
+    validate_schema(wrong_method.body, "error")
+
+    spec = api_client.session.get(f"{api_client.config.base_url}/openapi.json").json()
+    live_routes = {
+        (method.upper(), path)
+        for path, operations in spec["paths"].items()
+        if path.startswith("/api/")
+        for method in operations
+    }
+    assert live_routes == set(with_schema) | set(without_schema)
 
 
 def test_every_schema_file_is_itself_valid() -> None:
