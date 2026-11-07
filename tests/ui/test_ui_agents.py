@@ -1,7 +1,7 @@
 """The agents page: table, live search, sorting, and the create-agent modal."""
 
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 from typing import Callable
 
 import pytest
@@ -89,8 +89,25 @@ def test_guarantee_badge_reads_active_for_a_new_agent(
     assert agents_page.months_active_of(last_covered["id"]) == "2"
 
 
-def test_guarantee_badge_reads_expired_for_an_established_agent() -> None:
+def test_guarantee_badge_reads_expired_for_an_established_agent(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """An agent past the window shows the grey Guarantee Expired badge."""
+    last_day_of_month_three = date.fromisoformat(_first_of_month(2)) - timedelta(days=1)
+    just_lapsed = agent_factory(name="Badge Month Three", join_date=last_day_of_month_three.isoformat())
+    long_settled = agent_factory(name="Badge Settled", join_date="2023-01-10")
+    agents_page.reload()
+
+    for agent in (just_lapsed, long_settled):
+        aid = agent["id"]
+        assert api_client.get_agent(aid).body["guarantee_active"] is False
+
+        assert agents_page.guarantee_state(aid) == "expired"
+        assert agents_page.guarantee_label(aid) == "Guarantee Expired"
+
+    assert agents_page.months_active_of(just_lapsed["id"]) == "3"
 
 
 def test_search_filters_the_table_as_you_type() -> None:
