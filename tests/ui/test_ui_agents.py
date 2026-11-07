@@ -1,10 +1,12 @@
 """The agents page: table, live search, sorting, and the create-agent modal."""
 
+import uuid
 from collections import Counter
 from datetime import date, timedelta
 from typing import Callable
 
 import pytest
+from playwright.sync_api import expect
 
 from framework.api_client import ApiClient
 from pages.agents_page import AgentsPage
@@ -110,8 +112,42 @@ def test_guarantee_badge_reads_expired_for_an_established_agent(
     assert agents_page.months_active_of(just_lapsed["id"]) == "3"
 
 
-def test_search_filters_the_table_as_you_type() -> None:
+def test_search_filters_the_table_as_you_type(
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """Typing narrows the rows without a page reload."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    amber = agent_factory(name=f"{token} Amber")
+    ambrose = agent_factory(name=f"{token} Ambrose")
+    agent_factory(name=f"{token} Basil")
+    agents_page.reload()
+
+    page = agents_page.page
+    page.evaluate("window.__notReloaded = true")
+    api_calls: list[str] = []
+    page.on("request", lambda request: "/api/" in request.url and api_calls.append(request.url))
+
+    box = agents_page.testid(AgentsPage.SEARCH_INPUT)
+    box.press_sequentially(token)
+    expect(agents_page.rows()).to_have_count(3)
+
+    steps = [
+        (" ", 3),
+        ("A", 2),
+        ("m", 2),
+        ("b", 2),
+        ("e", 1),
+    ]
+    for key, expected_rows in steps:
+        box.press_sequentially(key)
+        expect(agents_page.rows()).to_have_count(expected_rows)
+
+    assert agents_page.row_ids() == [amber["id"]]
+    assert ambrose["id"] not in agents_page.row_ids()
+
+    assert page.evaluate("window.__notReloaded") is True
+    assert api_calls == []
 
 
 def test_search_matches_on_email_as_well_as_name() -> None:
