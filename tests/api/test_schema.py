@@ -307,8 +307,39 @@ def test_validation_error_matches_the_error_schema(
     assert sorted(codes["VALIDATION_ERROR"]) == sorted(from_pydantic)
 
 
-def test_conflict_error_matches_the_error_schema() -> None:
+def test_conflict_error_matches_the_error_schema(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    unique_email: Callable[[str], str],
+) -> None:
     """A 409 body carries a detail and a code."""
+    email = unique_email("conflict")
+    agent = agent_factory(email=email, join_date="2024-03-10")
+    policy = policy_factory(agent["id"], sold_date="2024-05-12", cancelled=True)
+
+    conflicts = {
+        "the same email": (
+            "DUPLICATE_EMAIL",
+            email,
+            api_client.create_agent(name="Second", email=email, join_date="2025-01-01"),
+        ),
+        "the same email in capitals": (
+            "DUPLICATE_EMAIL",
+            email,
+            api_client.create_agent(name="Third", email=email.upper(), join_date="2025-01-01"),
+        ),
+        "a second cancellation": (
+            "ALREADY_CANCELLED",
+            str(policy["id"]),
+            api_client.cancel_policy(policy["id"]),
+        ),
+    }
+    for label, (code, named, response) in conflicts.items():
+        assert response.status == 409, label
+        validate_schema(response.body, "error")
+        assert response.code == code, label
+        assert named in response.detail, f"{label}: {response.detail!r}"
 
 
 def test_responses_carry_no_unexpected_fields() -> None:
