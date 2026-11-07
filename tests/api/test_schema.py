@@ -8,9 +8,16 @@ from datetime import date
 from typing import Callable
 
 import pytest
+from jsonschema import Draft202012Validator, SchemaError
 
 from framework.api_client import ApiClient, ApiResponse
-from framework.schemas import SchemaValidationError, validate_schema
+from framework.schemas import (
+    SCHEMA_DIR,
+    SCHEMA_NAMES,
+    SchemaValidationError,
+    load_schema,
+    validate_schema,
+)
 
 pytestmark = [pytest.mark.api, pytest.mark.smoke]
 
@@ -415,3 +422,24 @@ def test_responses_carry_no_unexpected_fields(
 
 def test_every_schema_file_is_itself_valid() -> None:
     """The four schema documents are well-formed JSON Schema."""
+    on_disk = {path.stem for path in SCHEMA_DIR.glob("*.json")}
+    assert on_disk == set(SCHEMA_NAMES) == {"agent", "policy", "commission", "error"}
+
+    known_keywords = {"$schema", "title", "type", "required", "additionalProperties", "properties"}
+    for name in SCHEMA_NAMES:
+        schema = load_schema(name)
+
+        Draft202012Validator.check_schema(schema)
+
+        assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema", name
+        assert set(schema) <= known_keywords, f"{name}: {sorted(set(schema) - known_keywords)}"
+        assert schema["type"] == "object", name
+        assert schema["additionalProperties"] is False, name
+        assert set(schema["required"]) == set(schema["properties"]), name
+        for field, rule in schema["properties"].items():
+            assert "type" in rule, f"{name}.{field} has no type"
+
+    with pytest.raises(SchemaError):
+        Draft202012Validator.check_schema({"type": "objekt"})
+    with pytest.raises(SchemaError):
+        Draft202012Validator.check_schema({"type": "object", "required": "id"})
