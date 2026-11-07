@@ -132,7 +132,7 @@ pages/
   commission_page.py
 tests/
   api/  ui/  parity/   the three test layers
-  framework/           the test client's own tests, run without the app
+  framework/           the framework's own tests (client, schema validator), run without the app
 ```
 
 ## Writing the tests

@@ -10,15 +10,37 @@ could be handed to a non-Python consumer.  Load one by name and validate::
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator, ValidationError
+from jsonschema import Draft202012Validator, ValidationError, validators
 
 SCHEMA_DIR = Path(__file__).resolve().parent
 
 SCHEMA_NAMES = ("agent", "policy", "commission", "error")
+
+
+def _end_of_string(pattern: str) -> str:
+    """Make a trailing ``$`` mean the end of the string, as JSON Schema intends.
+
+    JSON Schema patterns follow ECMA-262, where ``$`` is the end of the string.
+    Python's ``$`` also matches just before a final newline, so ``"2024-05\\n"``
+    would satisfy ``^...$``. ``\\Z`` has the ECMA meaning in Python.
+    """
+    if pattern.endswith("$") and not pattern.endswith(r"\$"):
+        return pattern[:-1] + r"\Z"
+    return pattern
+
+
+def _strict_pattern(validator, pattern, instance, schema):
+    """The ``pattern`` keyword, with ``$`` read as the end of the string."""
+    if validator.is_type(instance, "string") and not re.search(_end_of_string(pattern), instance):
+        yield ValidationError(f"{instance!r} does not match {pattern!r}")
+
+
+StrictPatternValidator = validators.extend(Draft202012Validator, {"pattern": _strict_pattern})
 
 
 class SchemaValidationError(AssertionError):
@@ -45,7 +67,7 @@ def validate_schema(payload: Any, name: str, *, many: bool = False) -> Any:
     collection endpoint can be checked with the same schema as a single one.
     Every violation in the payload is reported, not just the first.
     """
-    validator = Draft202012Validator(load_schema(name))
+    validator = StrictPatternValidator(load_schema(name))
     items = payload if many else [payload]
 
     if many and not isinstance(payload, list):
