@@ -1,12 +1,36 @@
 """The agents page: table, live search, sorting, and the create-agent modal."""
 
+from collections import Counter
+from typing import Callable
+
 import pytest
+
+from pages.agents_page import AgentsPage
 
 pytestmark = [pytest.mark.ui, pytest.mark.smoke]
 
 
-def test_agents_table_lists_every_agent() -> None:
+def test_agents_table_lists_every_agent(
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """Each agent from the API gets a row."""
+    mine = [agent_factory(name=f"Listed Agent {n}", join_date="2024-03-10") for n in range(3)]
+    agents_page.reload()
+
+    row_ids = agents_page.row_ids()
+
+    duplicated = [agent_id for agent_id, seen in Counter(row_ids).items() if seen > 1]
+    assert not duplicated, f"rows rendered more than once: {duplicated}"
+
+    for agent in mine:
+        assert agent["id"] in row_ids, f"agent {agent['id']} has no row"
+        assert agents_page.name_of(agent["id"]) == agent["name"]
+
+    assert agents_page.row_count() == len(row_ids) >= len(mine)
+    assert agents_page.is_visible(AgentsPage.TABLE)
+    assert not agents_page.is_visible(AgentsPage.EMPTY_STATE)
+    assert not agents_page.is_visible(AgentsPage.NO_RESULTS)
 
 
 def test_agent_row_shows_name_email_join_date_and_months_active() -> None:
