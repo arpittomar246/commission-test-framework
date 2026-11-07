@@ -201,8 +201,36 @@ def test_search_with_no_matches_shows_the_no_results_state(
     expect(agents_page.testid(AgentsPage.NO_RESULTS)).to_be_hidden()
 
 
-def test_clearing_the_search_restores_every_row() -> None:
+def test_clearing_the_search_restores_every_row(
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """Emptying the box brings the full table back."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    agent_factory(name=f"{token} Kept")
+    agent_factory(name="Hidden While Searching")
+    agents_page.reload()
+
+    everyone = agents_page.row_ids()
+    assert len(everyone) >= 2
+
+    box = agents_page.testid(AgentsPage.SEARCH_INPUT)
+    ways_to_clear = {
+        "emptied in one go": lambda: box.fill(""),
+        "selected and deleted": lambda: (box.press("ControlOrMeta+a"), box.press("Backspace")),
+        "left with only spaces": lambda: box.fill("   "),
+    }
+    for how, clear in ways_to_clear.items():
+        agents_page.search(token)
+        expect(agents_page.rows()).to_have_count(1)
+
+        clear()
+
+        expect(agents_page.rows()).to_have_count(len(everyone))
+        assert agents_page.row_ids() == everyone, how
+        assert not agents_page.is_visible(AgentsPage.NO_RESULTS), how
+
+        box.fill("")
 
 
 def test_clicking_a_column_header_sorts_the_table() -> None:
