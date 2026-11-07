@@ -150,8 +150,29 @@ def test_search_filters_the_table_as_you_type(
     assert api_calls == []
 
 
-def test_search_matches_on_email_as_well_as_name() -> None:
+def test_search_matches_on_email_as_well_as_name(
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """A fragment of an email address finds its agent."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    in_local_part = agent_factory(name="Email Match Local", email=f"{token}.local@example.com")
+    in_domain = agent_factory(name="Email Match Domain", email=f"desk@{token}.example.com")
+    agents_page.reload()
+
+    for agent in (in_local_part, in_domain):
+        assert token not in agent["name"].lower()
+
+    searches = [
+        (token, {in_local_part["id"], in_domain["id"]}),
+        (f"@{token}", {in_domain["id"]}),
+        (f"{token}.LOCAL", {in_local_part["id"]}),
+    ]
+    for term, expected in searches:
+        agents_page.clear_search()
+        agents_page.search(term)
+        expect(agents_page.rows()).to_have_count(len(expected))
+        assert set(agents_page.row_ids()) == expected, term
 
 
 def test_search_with_no_matches_shows_the_no_results_state() -> None:
