@@ -1,6 +1,7 @@
 """The agents page: table, live search, sorting, and the create-agent modal."""
 
 from collections import Counter
+from datetime import date
 from typing import Callable
 
 import pytest
@@ -9,6 +10,13 @@ from framework.api_client import ApiClient
 from pages.agents_page import AgentsPage
 
 pytestmark = [pytest.mark.ui, pytest.mark.smoke]
+
+
+def _first_of_month(months_ago: int) -> str:
+    """The first day of the calendar month ``months_ago`` before this one."""
+    today = date.today()
+    total = today.year * 12 + (today.month - 1) - months_ago
+    return date(total // 12, total % 12 + 1, 1).isoformat()
 
 
 def test_agents_table_lists_every_agent(
@@ -60,8 +68,25 @@ def test_agent_row_shows_name_email_join_date_and_months_active(
     assert link.get_attribute("href") == f"/commission?agent_id={aid}"
 
 
-def test_guarantee_badge_reads_active_for_a_new_agent() -> None:
+def test_guarantee_badge_reads_active_for_a_new_agent(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """An agent inside the window shows the green Guarantee Active badge."""
+    joined_today = agent_factory(name="Badge Today", join_date=date.today().isoformat())
+    last_covered = agent_factory(name="Badge Month Two", join_date=_first_of_month(2))
+    agents_page.reload()
+
+    for agent in (joined_today, last_covered):
+        aid = agent["id"]
+        assert api_client.get_agent(aid).body["guarantee_active"] is True
+
+        assert agents_page.guarantee_state(aid) == "active"
+        assert agents_page.guarantee_label(aid) == "Guarantee Active"
+
+    assert agents_page.months_active_of(joined_today["id"]) == "0"
+    assert agents_page.months_active_of(last_covered["id"]) == "2"
 
 
 def test_guarantee_badge_reads_expired_for_an_established_agent() -> None:
