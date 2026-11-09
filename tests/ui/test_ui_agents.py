@@ -2,7 +2,7 @@
 
 import uuid
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 
 import pytest
@@ -298,8 +298,28 @@ def test_clicking_the_same_header_twice_reverses_the_sort(
     assert agents_page.row_ids() == ascending
 
 
-def test_add_agent_button_opens_the_modal() -> None:
+def test_add_agent_button_opens_the_modal(agents_page: AgentsPage) -> None:
     """The modal becomes visible when the button is clicked."""
+    agents_page.page.clock.set_fixed_time(datetime(2026, 11, 9, 12, 0, tzinfo=timezone.utc))
+    modal = agents_page.testid(AgentsPage.MODAL)
+
+    for button in (AgentsPage.ADD_BUTTON, "new-button"):
+        expect(modal).to_be_hidden()
+        assert not agents_page.modal_is_open(AgentsPage.MODAL), button
+
+        agents_page.click_testid(button)
+
+        expect(modal).to_be_visible()
+        assert agents_page.modal_is_open(AgentsPage.MODAL), button
+        assert agents_page.get_value(AgentsPage.NAME_INPUT) == "", button
+        assert agents_page.get_value(AgentsPage.EMAIL_INPUT) == "", button
+        assert agents_page.get_value(AgentsPage.JOIN_DATE_INPUT) == "2026-11-09", button
+        for field in ("name", "email", "join-date"):
+            assert not agents_page.field_error_visible(field), f"{button}: {field} error showing"
+
+        agents_page.close_add_modal()
+        expect(modal).to_be_hidden()
+        assert not agents_page.modal_is_open(AgentsPage.MODAL), button
 
 
 def test_creating_an_agent_adds_a_row_and_shows_a_success_toast() -> None:
