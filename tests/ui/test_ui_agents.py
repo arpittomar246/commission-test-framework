@@ -412,5 +412,30 @@ def test_cancelling_the_modal_creates_nothing(
     expect(agents_page.rows()).to_have_count(0)
 
 
+def test_escape_closes_the_modal_without_saving(
+    api_client: ApiClient,
+    agents_page: AgentsPage,
+) -> None:
+    """Pressing Escape inside the form backs out of it, the same as Cancel."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    email = f"{token}@example.com"
+
+    agents_page.open_add_modal()
+    agents_page.fill_agent_form(f"{token} Escaped", email, "2024-03-10")
+    agents_page.testid(AgentsPage.EMAIL_INPUT).press("Escape")
+
+    agents_page.wait_for_modal_closed(AgentsPage.MODAL)
+    assert not agents_page.modal_is_open(AgentsPage.MODAL)
+    assert agents_page.toast_count("success") == 0
+    assert email not in {a["email"] for a in api_client.list_agents().body}
+
+    agents_page.page.keyboard.press("Escape")
+    assert not agents_page.modal_is_open(AgentsPage.MODAL)
+
+    agents_page.open_add_modal()
+    assert agents_page.modal_is_open(AgentsPage.MODAL)
+    assert agents_page.get_value(AgentsPage.NAME_INPUT) == ""
+
+
 def test_empty_state_shows_when_there_are_no_agents() -> None:
     """With an empty database the page offers the empty state."""
