@@ -128,5 +128,5 @@ function todayISO() {
 }
 
 function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
+  return todayISO().slice(0, 7);
 }
