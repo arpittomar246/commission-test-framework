@@ -265,8 +265,37 @@ def test_clicking_a_column_header_sorts_the_table(
         assert agents_page.row_ids() == [a["id"] for a in order], column
 
 
-def test_clicking_the_same_header_twice_reverses_the_sort() -> None:
+def test_clicking_the_same_header_twice_reverses_the_sort(
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """The second click flips the direction."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    created = [agent_factory(name=f"{token} {n}") for n in ("Bravo", "Alpha", "Charlie")]
+    by_name = sorted(created, key=lambda a: a["name"])
+    ascending = [a["id"] for a in by_name]
+    descending = ascending[::-1]
+
+    agents_page.reload()
+    agents_page.search(token)
+    expect(agents_page.rows()).to_have_count(3)
+    assert agents_page.row_ids() not in (ascending, descending)
+
+    for click, expected in enumerate([ascending, descending, ascending], start=1):
+        agents_page.sort_by("name")
+        assert agents_page.row_ids() == expected, f"after click {click}"
+
+    agents_page.sort_by("name")
+    assert agents_page.row_ids() == descending
+
+    agents_page.clear_search()
+    agents_page.search(token)
+    expect(agents_page.rows()).to_have_count(3)
+    assert agents_page.row_ids() == descending
+
+    agents_page.sort_by("email")
+    agents_page.sort_by("name")
+    assert agents_page.row_ids() == ascending
 
 
 def test_add_agent_button_opens_the_modal() -> None:
