@@ -2,6 +2,7 @@
 
 import uuid
 from collections import Counter
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import pytest
@@ -37,6 +38,21 @@ def test_agent_dropdown_lists_every_agent(
     for agent in (plain, awkward):
         assert label_for[str(agent["id"])] == agent["name"]
     assert options.locator("b").count() == 0
+
+
+def test_month_defaults_to_the_local_month_not_the_utc_one(browser, app_config) -> None:
+    """At 2 am in India on the 1st, the month picker opens on the new month."""
+    context = browser.new_context(base_url=app_config.base_url, timezone_id="Asia/Kolkata")
+    try:
+        page = context.new_page()
+        india = timezone(timedelta(hours=5, minutes=30))
+        page.clock.set_fixed_time(datetime(2026, 12, 1, 2, 0, tzinfo=india))
+
+        commission = CommissionPage(page).goto()
+
+        assert commission.get_value(CommissionPage.MONTH_INPUT) == "2026-12"
+    finally:
+        context.close()
 
 
 def test_calculate_renders_the_breakdown_card() -> None:
