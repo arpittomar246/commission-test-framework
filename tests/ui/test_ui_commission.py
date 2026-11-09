@@ -164,8 +164,36 @@ def test_final_payout_is_displayed_prominently(
     assert 0 <= headline["top"] and headline["bottom"] <= headline["viewport"]
 
 
-def test_guarantee_banner_appears_when_the_minimum_is_applied() -> None:
+def test_guarantee_banner_appears_when_the_minimum_is_applied(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """A topped-up month shows the guarantee banner."""
+    agent = agent_factory(name="Topped Up Agent", join_date="2024-03-10")
+    policy_factory(agent["id"], value=50_000, sold_date="2024-04-15")
+    policy_factory(agent["id"], value=100_000, sold_date="2024-05-08")
+    policy_factory(agent["id"], value=300_000, sold_date="2024-05-22", cancelled=True)
+    commission_page.reload()
+
+    reasons = {
+        "2024-03": "nothing sold",
+        "2024-04": "sales below the minimum",
+        "2024-05": "a clawback pulled it below",
+    }
+    banner = commission_page.guarantee_banner()
+    for month, reason in reasons.items():
+        commission_page.calculate(agent["id"], month)
+        expect(commission_page.testid(CommissionPage.RESULT_MONTH)).to_have_text(month)
+
+        api = api_client.get_commission(agent["id"], month).body
+        assert api["guarantee_applied"] is True, reason
+        assert api["subtotal"] < api["final_payout"], reason
+
+        expect(banner).to_be_visible()
+        assert "Minimum guarantee applied" in commission_page.guarantee_banner_text(), reason
+        assert commission_page.guarantee_applied() == "Yes", reason
 
 
 def test_guarantee_banner_is_hidden_when_the_minimum_is_not_applied() -> None:
