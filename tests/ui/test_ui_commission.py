@@ -120,8 +120,48 @@ def test_breakdown_shows_every_line_of_the_calculation(
     assert commission_page.policy_count() == str(api["policy_count"]) == "2"
 
 
-def test_final_payout_is_displayed_prominently() -> None:
+def test_final_payout_is_displayed_prominently(
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """The final payout renders as the headline figure."""
+    agent = agent_factory(name="Headline Agent", join_date="2023-01-10")
+    policy_factory(agent["id"], value=300_000, sold_date="2024-05-12")
+    commission_page.reload()
+    commission_page.calculate(agent["id"], "2024-05")
+
+    def drawn(testid: str) -> dict:
+        return commission_page.testid(testid).evaluate(
+            """(el) => {
+                const style = getComputedStyle(el);
+                const box = el.getBoundingClientRect();
+                return {
+                    size: parseFloat(style.fontSize),
+                    weight: Number(style.fontWeight),
+                    top: box.top,
+                    bottom: box.bottom,
+                    viewport: window.innerHeight,
+                };
+            }"""
+        )
+
+    headline = drawn(CommissionPage.FINAL_PAYOUT)
+    others = {
+        testid: drawn(testid)
+        for testid in (
+            CommissionPage.GROSS,
+            CommissionPage.CLAWBACK,
+            CommissionPage.SUBTOTAL,
+            CommissionPage.GUARANTEE_APPLIED,
+            CommissionPage.POLICY_COUNT,
+        )
+    }
+
+    for testid, line in others.items():
+        assert headline["size"] >= 1.5 * line["size"], f"payout not clearly larger than {testid}"
+    assert headline["weight"] >= 700
+    assert 0 <= headline["top"] and headline["bottom"] <= headline["viewport"]
 
 
 def test_guarantee_banner_appears_when_the_minimum_is_applied() -> None:
