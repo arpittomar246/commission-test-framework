@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import pytest
+from playwright.sync_api import expect
 
 from pages.commission_page import CommissionPage
 
@@ -55,8 +56,37 @@ def test_month_defaults_to_the_local_month_not_the_utc_one(browser, app_config) 
         context.close()
 
 
-def test_calculate_renders_the_breakdown_card() -> None:
+def test_calculate_renders_the_breakdown_card(
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """Choosing an agent and month and calculating reveals the result card."""
+    agent = agent_factory(name="Breakdown Card Agent", join_date="2023-01-10")
+    policy_factory(agent["id"], value=300_000, sold_date="2024-05-12")
+    commission_page.reload()
+
+    card = commission_page.testid(CommissionPage.RESULT_CARD)
+    expect(card).to_be_hidden()
+
+    commission_page.calculate(agent["id"], "2024-05")
+
+    expect(card).to_be_visible()
+    assert commission_page.result_agent() == "Breakdown Card Agent"
+    assert commission_page.result_month() == "2024-05"
+
+    fields = [
+        CommissionPage.GROSS,
+        CommissionPage.CLAWBACK,
+        CommissionPage.SUBTOTAL,
+        CommissionPage.GUARANTEE_APPLIED,
+        CommissionPage.FINAL_PAYOUT,
+        CommissionPage.POLICY_COUNT,
+    ]
+    for field in fields:
+        assert commission_page.get_text(field) not in ("", "--"), f"{field} was never filled in"
+
+    assert not commission_page.error_visible()
 
 
 def test_breakdown_shows_every_line_of_the_calculation() -> None:
