@@ -233,8 +233,36 @@ def test_clearing_the_search_restores_every_row(
         box.fill("")
 
 
-def test_clicking_a_column_header_sorts_the_table() -> None:
+def test_clicking_a_column_header_sorts_the_table(
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """Sorting by name reorders the rows."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    alpha = agent_factory(
+        name=f"{token} Alpha", email=f"{token}.c@example.com", join_date=_first_of_month(2)
+    )
+    bravo = agent_factory(
+        name=f"{token} Bravo", email=f"{token}.a@example.com", join_date=_first_of_month(10)
+    )
+    charlie = agent_factory(
+        name=f"{token} Charlie", email=f"{token}.b@example.com", join_date=date.today().isoformat()
+    )
+    agents_page.reload()
+    agents_page.search(token)
+    expect(agents_page.rows()).to_have_count(3)
+
+    assert [agents_page.months_active_of(a["id"]) for a in (alpha, bravo, charlie)] == ["2", "10", "0"]
+
+    expected = {
+        "name": [alpha, bravo, charlie],
+        "email": [bravo, charlie, alpha],
+        "join_date": [bravo, alpha, charlie],
+        "months_active": [charlie, alpha, bravo],
+    }
+    for column, order in expected.items():
+        agents_page.sort_by(column)
+        assert agents_page.row_ids() == [a["id"] for a in order], column
 
 
 def test_clicking_the_same_header_twice_reverses_the_sort() -> None:
