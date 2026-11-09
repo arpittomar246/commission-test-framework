@@ -8,6 +8,7 @@ from typing import Callable
 import pytest
 from playwright.sync_api import expect
 
+from framework.api_client import ApiClient
 from pages.commission_page import CommissionPage
 
 pytestmark = pytest.mark.ui
@@ -89,8 +90,34 @@ def test_calculate_renders_the_breakdown_card(
     assert not commission_page.error_visible()
 
 
-def test_breakdown_shows_every_line_of_the_calculation() -> None:
+def test_breakdown_shows_every_line_of_the_calculation(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """Gross, clawback, subtotal, guarantee and final payout are all present."""
+    agent = agent_factory(name="Every Line Agent", join_date="2023-01-10")
+    policy_factory(agent["id"], value=4_000_000, sold_date="2024-05-06")
+    policy_factory(agent["id"], value=1_500_000, sold_date="2024-05-20", cancelled=True)
+    commission_page.reload()
+
+    commission_page.calculate(agent["id"], "2024-05")
+    api = api_client.get_commission(agent["id"], "2024-05").body
+
+    shown = {
+        "gross_commission": (CommissionPage.GROSS, "5,50,000.00"),
+        "clawback": (CommissionPage.CLAWBACK, "-1,50,000.00"),
+        "subtotal": (CommissionPage.SUBTOTAL, "4,00,000.00"),
+        "final_payout": (CommissionPage.FINAL_PAYOUT, "4,00,000.00"),
+    }
+    for field, (testid, text) in shown.items():
+        assert commission_page.get_text(testid) == text, field
+        assert commission_page.as_number(testid) == pytest.approx(api[field]), field
+
+    assert api["guarantee_applied"] is False
+    assert commission_page.guarantee_applied() == "No"
+    assert commission_page.policy_count() == str(api["policy_count"]) == "2"
 
 
 def test_final_payout_is_displayed_prominently() -> None:
