@@ -1,12 +1,42 @@
 """The commission page: the calculator, the breakdown, the banner and the chart."""
 
+import uuid
+from collections import Counter
+from typing import Callable
+
 import pytest
+
+from pages.commission_page import CommissionPage
 
 pytestmark = pytest.mark.ui
 
 
-def test_agent_dropdown_lists_every_agent() -> None:
+def test_agent_dropdown_lists_every_agent(
+    agent_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """The dropdown is populated from the API."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    plain = agent_factory(name=f"{token} Plain")
+    awkward = agent_factory(name=f"{token} <b>O'Brien</b> & Co")
+    commission_page.reload()
+
+    options = commission_page.testid(CommissionPage.AGENT_SELECT).locator("option")
+    values = options.evaluate_all("(nodes) => nodes.map((n) => n.value)")
+    labels = commission_page.agent_options()
+
+    assert values[0] == ""
+    assert labels[0] == "Select an agent"
+    assert commission_page.get_value(CommissionPage.AGENT_SELECT) == ""
+
+    duplicated = [v for v, seen in Counter(values).items() if seen > 1]
+    assert not duplicated, f"agents listed more than once: {duplicated}"
+    assert all(v.isdigit() for v in values[1:])
+
+    label_for = dict(zip(values, labels))
+    for agent in (plain, awkward):
+        assert label_for[str(agent["id"])] == agent["name"]
+    assert options.locator("b").count() == 0
 
 
 def test_calculate_renders_the_breakdown_card() -> None:
