@@ -437,5 +437,34 @@ def test_escape_closes_the_modal_without_saving(
     assert agents_page.get_value(AgentsPage.NAME_INPUT) == ""
 
 
-def test_empty_state_shows_when_there_are_no_agents() -> None:
+@pytest.mark.serial
+def test_empty_state_shows_when_there_are_no_agents(
+    reset_db: None,
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    agents_page: AgentsPage,
+) -> None:
     """With an empty database the page offers the empty state."""
+    agents_page.reload()
+
+    assert api_client.list_agents().body == []
+    assert agents_page.row_count() == 0
+    expect(agents_page.testid(AgentsPage.EMPTY_STATE)).to_be_visible()
+    assert "No agents yet" in agents_page.get_text(AgentsPage.EMPTY_STATE)
+    assert not agents_page.is_visible(AgentsPage.TABLE)
+    assert not agents_page.is_visible(AgentsPage.NO_RESULTS)
+
+    agents_page.click_testid("agents-empty-cta")
+    assert agents_page.modal_is_open(AgentsPage.MODAL)
+    agents_page.close_add_modal()
+
+    first = agent_factory(name="First After Empty")
+    second = agent_factory(name="Second After Empty")
+    agents_page.reload()
+
+    every_agent = {a["id"] for a in api_client.list_agents().body}
+    assert every_agent == {first["id"], second["id"]}
+    assert set(agents_page.row_ids()) == every_agent
+    assert agents_page.row_ids() == [second["id"], first["id"]]
+    assert agents_page.is_visible(AgentsPage.TABLE)
+    assert not agents_page.is_visible(AgentsPage.EMPTY_STATE)
