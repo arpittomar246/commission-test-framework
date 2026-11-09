@@ -67,6 +67,13 @@ function closeModal(testid) {
   });
 }
 
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  document.querySelectorAll('[data-open="true"]').forEach((modal) => {
+    closeModal(modal.getAttribute('data-testid'));
+  });
+});
+
 function showFieldError(testid, message) {
   const el = document.querySelector(`[data-testid="${testid}"]`);
   el.textContent = message;
