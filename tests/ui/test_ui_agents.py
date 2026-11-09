@@ -1,5 +1,6 @@
 """The agents page: table, live search, sorting, and the create-agent modal."""
 
+import sqlite3
 import uuid
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
@@ -338,8 +339,42 @@ def test_join_date_defaults_to_the_local_day_not_the_utc_one(browser, app_config
         context.close()
 
 
-def test_creating_an_agent_adds_a_row_and_shows_a_success_toast() -> None:
+def test_creating_an_agent_adds_a_row_and_shows_a_success_toast(
+    api_client: ApiClient,
+    app_config,
+    agents_page: AgentsPage,
+) -> None:
     """A valid submission closes the modal, refreshes the table and toasts."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    name = f"{token} Created In The Form"
+    typed_email = f"{token}.New@Example.COM"
+    stored_email = typed_email.lower()
+
+    try:
+        agents_page.create_agent(name, typed_email, "2024-03-10")
+
+        assert agents_page.wait_for_toast("success") == f"Agent {name} created"
+        agents_page.wait_for_modal_closed(AgentsPage.MODAL)
+        assert not agents_page.modal_is_open(AgentsPage.MODAL)
+
+        matches = [a for a in api_client.list_agents().body if a["email"] == stored_email]
+        assert len(matches) == 1
+        created = matches[0]
+        assert created["name"] == name
+        assert created["join_date"] == "2024-03-10"
+
+        expect(agents_page.row(created["id"])).to_be_visible()
+        assert agents_page.name_of(created["id"]) == name
+        assert agents_page.email_of(created["id"]) == stored_email
+        assert agents_page.join_date_of(created["id"]) == "2024-03-10"
+
+        agents_page.search(token)
+        expect(agents_page.rows()).to_have_count(1)
+    finally:
+        with sqlite3.connect(str(app_config.db_path)) as db:
+            ids = [row[0] for row in db.execute("SELECT id FROM agents WHERE email = ?", (stored_email,))]
+            db.executemany("DELETE FROM policies WHERE agent_id = ?", [(i,) for i in ids])
+            db.executemany("DELETE FROM agents WHERE id = ?", [(i,) for i in ids])
 
 
 def test_cancelling_the_modal_creates_nothing() -> None:
