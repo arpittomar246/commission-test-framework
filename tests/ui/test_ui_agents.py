@@ -377,8 +377,39 @@ def test_creating_an_agent_adds_a_row_and_shows_a_success_toast(
             db.executemany("DELETE FROM agents WHERE id = ?", [(i,) for i in ids])
 
 
-def test_cancelling_the_modal_creates_nothing() -> None:
+def test_cancelling_the_modal_creates_nothing(
+    api_client: ApiClient,
+    agents_page: AgentsPage,
+) -> None:
     """Dismissing the modal leaves the table untouched."""
+    token = f"zq{uuid.uuid4().hex[:8]}"
+    rows_before = agents_page.row_ids()
+
+    ways_out = {
+        "the Cancel button": AgentsPage.CANCEL_BUTTON,
+        "the close cross": AgentsPage.MODAL_CLOSE,
+    }
+    for how, button in ways_out.items():
+        email = f"{token}.{button}@example.com"
+        agents_page.open_add_modal()
+        agents_page.fill_agent_form(f"{token} Abandoned", email, "2024-03-10")
+
+        agents_page.click_testid(button)
+
+        agents_page.wait_for_modal_closed(AgentsPage.MODAL)
+        assert not agents_page.modal_is_open(AgentsPage.MODAL), how
+        assert agents_page.toast_count("success") == 0, how
+        assert agents_page.toast_count("error") == 0, how
+        assert email not in {a["email"] for a in api_client.list_agents().body}, how
+        assert agents_page.row_ids() == rows_before, how
+
+        agents_page.open_add_modal()
+        assert agents_page.get_value(AgentsPage.NAME_INPUT) == "", how
+        assert agents_page.get_value(AgentsPage.EMAIL_INPUT) == "", how
+        agents_page.close_add_modal()
+
+    agents_page.search(token)
+    expect(agents_page.rows()).to_have_count(0)
 
 
 def test_empty_state_shows_when_there_are_no_agents() -> None:
