@@ -322,6 +322,22 @@ def test_add_agent_button_opens_the_modal(agents_page: AgentsPage) -> None:
         assert not agents_page.modal_is_open(AgentsPage.MODAL), button
 
 
+def test_join_date_defaults_to_the_local_day_not_the_utc_one(browser, app_config) -> None:
+    """At 2 am in India on the 1st, the suggested join date is the 1st, not last month."""
+    context = browser.new_context(base_url=app_config.base_url, timezone_id="Asia/Kolkata")
+    try:
+        page = context.new_page()
+        india = timezone(timedelta(hours=5, minutes=30))
+        page.clock.set_fixed_time(datetime(2026, 12, 1, 2, 0, tzinfo=india))
+
+        agents = AgentsPage(page).goto()
+        agents.open_add_modal()
+
+        assert agents.get_value(AgentsPage.JOIN_DATE_INPUT) == "2026-12-01"
+    finally:
+        context.close()
+
+
 def test_creating_an_agent_adds_a_row_and_shows_a_success_toast() -> None:
     """A valid submission closes the modal, refreshes the table and toasts."""
 
