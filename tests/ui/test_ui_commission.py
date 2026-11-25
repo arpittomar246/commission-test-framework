@@ -297,8 +297,37 @@ def test_clawback_is_displayed_as_a_deduction(
     )
 
 
-def test_chart_plots_the_last_six_months() -> None:
+def test_chart_plots_the_last_six_months(
+    agent_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """The chart is drawn with six month labels."""
+    agent = agent_factory(name="Chart Months Agent", join_date="2023-01-10")
+    commission_page.reload()
+
+    commission_page.calculate(agent["id"], "2024-02")
+
+    across_the_new_year = ["2023-09", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02"]
+    assert commission_page.chart_months() == across_the_new_year
+
+    chart = commission_page.chart()
+    drawn = chart.evaluate(
+        """(el) => {
+            const instance = Chart.getChart(el);
+            return { labels: instance.data.labels, bars: instance.getDatasetMeta(0).data.length };
+        }"""
+    )
+    assert drawn == {"labels": across_the_new_year, "bars": 6}
+
+    box = chart.bounding_box()
+    assert box is not None and box["width"] > 0 and box["height"] > 0
+
+    commission_page.calculate(agent["id"], "2024-07")
+    expect(commission_page.testid(CommissionPage.RESULT_MONTH)).to_have_text("2024-07")
+
+    within_one_year = ["2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07"]
+    assert commission_page.chart_months() == within_one_year
+    assert chart.evaluate("(el) => Chart.getChart(el).data.labels") == within_one_year
 
 
 def test_chart_payouts_match_the_history_endpoint() -> None:
