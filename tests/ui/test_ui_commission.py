@@ -263,8 +263,38 @@ def test_guarantee_banner_names_the_amount_the_payout_was_raised_to(
     assert "raised to 20,000.00" in commission_page.guarantee_banner_text()
 
 
-def test_clawback_is_displayed_as_a_deduction() -> None:
+def test_clawback_is_displayed_as_a_deduction(
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """The clawback line reads as a subtraction."""
+    agent = agent_factory(name="Deduction Agent", join_date="2023-01-10")
+    policy_factory(agent["id"], value=400_000, sold_date="2024-05-06")
+    policy_factory(agent["id"], value=150_000, sold_date="2024-05-20", cancelled=True)
+    policy_factory(agent["id"], value=300_000, sold_date="2024-06-10")
+    commission_page.reload()
+
+    commission_page.calculate(agent["id"], "2024-05")
+
+    assert commission_page.clawback() == "-15,000.00"
+    gross = commission_page.as_number(CommissionPage.GROSS)
+    clawback = commission_page.as_number(CommissionPage.CLAWBACK)
+    subtotal = commission_page.as_number(CommissionPage.SUBTOTAL)
+    assert gross - clawback == pytest.approx(subtotal)
+
+    red, green, blue = commission_page.testid(CommissionPage.CLAWBACK).evaluate(
+        """(el) => getComputedStyle(el).color.match(/\\d+/g).slice(0, 3).map(Number)"""
+    )
+    assert red > green + 60 and red > blue + 60, (red, green, blue)
+
+    commission_page.calculate(agent["id"], "2024-06")
+    expect(commission_page.testid(CommissionPage.RESULT_MONTH)).to_have_text("2024-06")
+
+    assert commission_page.clawback() == "0.00"
+    assert commission_page.as_number(CommissionPage.SUBTOTAL) == pytest.approx(
+        commission_page.as_number(CommissionPage.GROSS)
+    )
 
 
 def test_chart_plots_the_last_six_months() -> None:
