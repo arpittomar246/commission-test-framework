@@ -330,8 +330,46 @@ def test_chart_plots_the_last_six_months(
     assert chart.evaluate("(el) => Chart.getChart(el).data.labels") == within_one_year
 
 
-def test_chart_payouts_match_the_history_endpoint() -> None:
+def test_chart_payouts_match_the_history_endpoint(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """The plotted values match what the API returned."""
+    agent = agent_factory(name="Chart Payouts Agent", join_date="2024-03-10")
+    policy_factory(agent["id"], value=300_000, sold_date="2024-04-15")
+    policy_factory(agent["id"], value=100_000, sold_date="2024-05-08")
+    policy_factory(agent["id"], value=150_000, sold_date="2024-05-21", cancelled=True)
+    policy_factory(agent["id"], value=50_000, sold_date="2024-06-12")
+    policy_factory(agent["id"], value=80_000, sold_date="2024-07-03")
+    policy_factory(agent["id"], value=200_000, sold_date="2024-07-25", cancelled=True)
+    commission_page.reload()
+
+    commission_page.calculate(agent["id"], "2024-07")
+
+    history = api_client.get_commission_history(agent["id"], "2024-07").body
+    plotted = commission_page.chart_payouts()
+    assert commission_page.chart_months() == history["months"]
+    assert plotted == pytest.approx(history["payouts"])
+
+    drawn = commission_page.chart().evaluate("(el) => Chart.getChart(el).data.datasets[0].data")
+    assert drawn == pytest.approx(history["payouts"])
+
+    expected = {
+        "2024-02": 0,
+        "2024-03": 20_000,
+        "2024-04": 30_000,
+        "2024-05": 20_000,
+        "2024-06": 5_000,
+        "2024-07": 8_000,
+    }
+    assert dict(zip(history["months"], plotted)) == pytest.approx(expected)
+
+    for month, payout in zip(history["months"], plotted):
+        assert payout == pytest.approx(api_client.get_commission(agent["id"], month).body["final_payout"]), month
+
+    assert commission_page.as_number(CommissionPage.FINAL_PAYOUT) == pytest.approx(plotted[-1])
 
 
 def test_included_policies_table_lists_the_months_policies() -> None:
