@@ -196,8 +196,41 @@ def test_guarantee_banner_appears_when_the_minimum_is_applied(
         assert commission_page.guarantee_applied() == "Yes", reason
 
 
-def test_guarantee_banner_is_hidden_when_the_minimum_is_not_applied() -> None:
+def test_guarantee_banner_is_hidden_when_the_minimum_is_not_applied(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """A month that beat the minimum shows no banner."""
+    newcomer = agent_factory(name="Inside Window Agent", join_date="2024-03-10")
+    policy_factory(newcomer["id"], value=200_000, sold_date="2024-04-15")
+    policy_factory(newcomer["id"], value=350_000, sold_date="2024-05-15")
+    settled = agent_factory(name="Settled Small Earner", join_date="2023-01-10")
+    policy_factory(settled["id"], value=50_000, sold_date="2024-05-15")
+    commission_page.reload()
+
+    banner = commission_page.guarantee_banner()
+    commission_page.calculate(newcomer["id"], "2024-03")
+    expect(banner).to_be_visible()
+
+    cases = [
+        (newcomer, "2024-04", "earned exactly the minimum", 20_000.0),
+        (newcomer, "2024-05", "earned above the minimum", 35_000.0),
+        (settled, "2024-05", "window shut, earned below the minimum", 5_000.0),
+    ]
+    for agent, month, reason, payout in cases:
+        commission_page.calculate(agent["id"], month)
+        expect(commission_page.testid(CommissionPage.RESULT_MONTH)).to_have_text(month)
+        expect(commission_page.testid(CommissionPage.RESULT_AGENT)).to_have_text(agent["name"])
+
+        api = api_client.get_commission(agent["id"], month).body
+        assert api["guarantee_applied"] is False, reason
+        assert api["final_payout"] == pytest.approx(payout), reason
+
+        expect(banner).to_be_hidden()
+        assert commission_page.guarantee_applied() == "No", reason
+        assert commission_page.as_number(CommissionPage.FINAL_PAYOUT) == pytest.approx(payout), reason
 
 
 def test_guarantee_banner_names_the_amount_the_payout_was_raised_to() -> None:
