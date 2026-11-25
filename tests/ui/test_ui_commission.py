@@ -372,8 +372,63 @@ def test_chart_payouts_match_the_history_endpoint(
     assert commission_page.as_number(CommissionPage.FINAL_PAYOUT) == pytest.approx(plotted[-1])
 
 
-def test_included_policies_table_lists_the_months_policies() -> None:
+def test_included_policies_table_lists_the_months_policies(
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """The table shows exactly the policies sold in the selected month."""
+    agent = agent_factory(name="Table Agent", join_date="2023-01-10")
+    other = agent_factory(name="Table Other Agent", join_date="2023-01-10")
+
+    first_day = policy_factory(agent["id"], value=120_000, sold_date="2024-05-01", customer_name="First Day")
+    cancelled = policy_factory(
+        agent["id"], value=90_000, sold_date="2024-05-16", customer_name="Cancelled Mid", cancelled=True
+    )
+    last_day = policy_factory(agent["id"], value=60_000, sold_date="2024-05-31", customer_name="Last Day")
+    day_before = policy_factory(agent["id"], value=70_000, sold_date="2024-04-30", customer_name="Day Before")
+    day_after = policy_factory(agent["id"], value=80_000, sold_date="2024-06-01", customer_name="Day After")
+    policy_factory(agent["id"], value=50_000, sold_date="2023-05-15", customer_name="Year Earlier")
+    policy_factory(other["id"], value=110_000, sold_date="2024-05-15", customer_name="Other Agent")
+    commission_page.reload()
+
+    commission_page.calculate(agent["id"], "2024-05")
+
+    def listed() -> set[int]:
+        return {
+            int(testid.removeprefix("commission-policy-row-"))
+            for testid in commission_page.policy_rows().evaluate_all(
+                "(rows) => rows.map((row) => row.dataset.testid)"
+            )
+        }
+
+    may = {first_day["id"], cancelled["id"], last_day["id"]}
+    assert listed() == may
+    assert commission_page.policy_row_count() == 3
+    assert int(commission_page.get_text(CommissionPage.POLICY_COUNT)) == 3
+
+    expect(commission_page.testid(CommissionPage.POLICIES_CARD)).to_be_visible()
+    expect(commission_page.testid(CommissionPage.EMPTY_STATE)).to_be_hidden()
+
+    expect(commission_page.policy_row(first_day["id"])).to_contain_text("First Day")
+    expect(commission_page.policy_row(first_day["id"])).to_contain_text("2024-05-01")
+    expect(commission_page.testid(f"commission-policy-status-{cancelled['id']}")).to_have_attribute(
+        "data-status", "cancelled"
+    )
+    expect(commission_page.testid(f"commission-policy-status-{last_day['id']}")).to_have_attribute(
+        "data-status", "active"
+    )
+
+    commission_page.calculate(agent["id"], "2024-06")
+    expect(commission_page.testid(CommissionPage.RESULT_MONTH)).to_have_text("2024-06")
+
+    assert listed() == {day_after["id"]}
+    expect(commission_page.policy_row(first_day["id"])).to_have_count(0)
+
+    commission_page.calculate(agent["id"], "2024-04")
+    expect(commission_page.testid(CommissionPage.RESULT_MONTH)).to_have_text("2024-04")
+
+    assert listed() == {day_before["id"]}
 
 
 def test_included_policies_table_shows_per_policy_commission() -> None:
