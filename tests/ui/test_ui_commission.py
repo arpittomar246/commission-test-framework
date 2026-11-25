@@ -233,8 +233,34 @@ def test_guarantee_banner_is_hidden_when_the_minimum_is_not_applied(
         assert commission_page.as_number(CommissionPage.FINAL_PAYOUT) == pytest.approx(payout), reason
 
 
-def test_guarantee_banner_names_the_amount_the_payout_was_raised_to() -> None:
+def test_guarantee_banner_names_the_amount_the_payout_was_raised_to(
+    api_client: ApiClient,
+    agent_factory: Callable[..., dict],
+    policy_factory: Callable[..., dict],
+    commission_page: CommissionPage,
+) -> None:
     """The banner reports the final payout figure."""
+    agent = agent_factory(name="Raised Payout Agent", join_date="2024-03-10")
+    policy_factory(agent["id"], value=50_000, sold_date="2024-04-15")
+    commission_page.reload()
+
+    amount = commission_page.testid(CommissionPage.GUARANTEE_BANNER_AMOUNT)
+    amount.evaluate("(el) => { el.textContent = 'not yet written'; }")
+
+    commission_page.calculate(agent["id"], "2024-04")
+    expect(commission_page.guarantee_banner()).to_be_visible()
+
+    api = api_client.get_commission(agent["id"], "2024-04").body
+    assert api["guarantee_applied"] is True
+    assert api["subtotal"] == pytest.approx(5_000.0)
+
+    expect(amount).to_have_text("20,000.00")
+    assert commission_page.guarantee_banner_amount() == commission_page.final_payout()
+    assert commission_page.as_number(CommissionPage.GUARANTEE_BANNER_AMOUNT) == pytest.approx(
+        api["final_payout"]
+    )
+    assert commission_page.guarantee_banner_amount() != commission_page.subtotal()
+    assert "raised to 20,000.00" in commission_page.guarantee_banner_text()
 
 
 def test_clawback_is_displayed_as_a_deduction() -> None:
